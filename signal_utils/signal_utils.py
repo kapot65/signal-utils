@@ -37,13 +37,13 @@ def extract_from_dataset(dataset, threshold=700,
     return blocks
 
 
-def get_blocks(points, idxs):
+def get_blocks(points, idxs, threshold=700, area_l=50, area_r=100):
     blocks = []
     
     def add_blocks(blocks, idx):
         header = points.as_matrix()[idx]
         dataset = load_dataset(header[0], header[1], header[2])
-        blocks += extract_from_dataset(dataset)
+        blocks += extract_from_dataset(dataset, threshold, area_l, area_r)
     
     if isinstance(idxs, collections.Iterable):
         for i in tqdm(idxs):
