@@ -3,7 +3,6 @@
 import numpy as np
 from tqdm import tqdm
 
-
 from gdrive_utils import load_dataset, get_points_drom_drive
 
 
@@ -99,14 +98,6 @@ def extract_events(data, threshold=700):
         events.append([left, center, right])
         
     return events
-    
-    
-def generate_noise(size):
-    noise = np.random.randint(-20, 20, size=(size + 15))
-    c1 = np.convolve(noise, np.full((10), 0.315), 'valid')
-    c2 = np.convolve(c1, np.full((3), 1/3), 'valid')
-    c3 = np.convolve(c2, np.full((3), 1/3), 'valid') + 2.5
-    return np.round(c3)
 
 
 def test_functions():
