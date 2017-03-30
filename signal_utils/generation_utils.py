@@ -48,3 +48,20 @@ def gen_signal(x, ampl, pos,
         
     return y*ampl
 
+
+def gen_multiple(x, a, p, *args):
+    """
+      Функция нескольких событий
+      
+      @a - амплитуда текущего события
+      @p - положение пика текущего события
+      @args - последовательно указанные амплитуды 
+      и положения пиков остальных событий
+    
+    """
+    assert(not len(args)%2)
+
+    y = gen_signal(x, a, p)
+    for i in range(0, len(args), 2):
+        y += gen_signal(x, args[i], args[i + 1])
+    return y

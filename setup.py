@@ -15,7 +15,7 @@ reqs = [str(ir.req) for ir in install_reqs]
 setup(
     name = "signal_utils",
     description='',
-    version = "0.1.4",
+    version = "0.1.5",
     author = "Vasiliy Chernov",
     packages = ["signal_utils"],
     platforms = 'any',
