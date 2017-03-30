@@ -56,7 +56,7 @@ def get_blocks(points, idxs, threshold=700, area_l=50, area_r=100):
 def get_bin_sec(points, idx):
     header = points.as_matrix()[idx]
     dataset = load_dataset(header[0], header[1], header[2])
-    return dataset.params["freq"]**-1
+    return dataset.params["sample_freq"]**-1
 
 
 def extract_algo(data, threshold=700):
