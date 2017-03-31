@@ -40,13 +40,14 @@ def gen_signal(x, ampl, pos,
     """
 
     gauss = lambda x: np.exp((-1/2)*np.power((np.abs(sigma*x)), p))
+    gauss_rev = lambda y: (1/sigma)*np.power(-2*np.log(y), 1/p)
     spike = lambda x: (1/(1+2*x*s)**tail_factor - 1.0)*np.exp(-x*s)
     
-    y = gauss(x - pos)
-    spike_offset = np.where(y > 0.1)[0][-1]
-    y[spike_offset:] += spike(x[spike_offset:] - x[spike_offset])*tail_amp
-        
-    return y*ampl
+    spike_offset = gauss_rev(0.1) + pos
+    spike_x = x - spike_offset
+    spike_x[spike_x < 0] = 0
+    
+    return (gauss(x - pos) + spike(spike_x)*tail_amp)*ampl
 
 
 def gen_multiple(x, a, p, *args):
