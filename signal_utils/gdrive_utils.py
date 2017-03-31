@@ -14,11 +14,23 @@ import pandas as pd
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 
-gauth = GoogleAuth()
-gauth.LocalWebserverAuth()
-drive = GoogleDrive(gauth)
+gauth = None
+drive = None
+
+def __init_grive():
+    global gauth
+    global drive
+    
+    if not gauth:
+        gauth = GoogleAuth()
+        gauth.LocalWebserverAuth()
+    
+    if not drive:
+        drive = GoogleDrive(gauth)
+    
 
 def get_points_drom_drive():
+    __init_grive()
     points_raw = drive.ListFile({'q': "title contains '.rsb.zip'"}).GetList()
 
     times = [datetime.datetime.strptime(p["originalFilename"], \
@@ -33,6 +45,7 @@ def get_points_drom_drive():
 
 
 def load_dataset(id, name, size=0):
+    
     """
       Скачать файл данных платы ЛАН10-12PCI с диска и открыть его парсером
       @id - идентификатор файла на гугл диске
@@ -43,6 +56,7 @@ def load_dataset(id, name, size=0):
       
     """
     
+    __init_grive()
     if not(path.exists(name) and path.getsize(name) == size):
         file = drive.CreateFile({"id": id})
         file.GetContentFile(name)
