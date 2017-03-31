@@ -1,4 +1,5 @@
 numpy 
+scipy
 dfparser
 mpld3
 tqdm
