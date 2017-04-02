@@ -13,11 +13,13 @@ install_reqs = parse_requirements("signal_utils/requirements.txt",
 reqs = [str(ir.req) for ir in install_reqs]
 
 setup(
-    name = "signal_utils",
+    name="signal_utils",
     description='',
-    version = "0.1.8",
-    author = "Vasiliy Chernov",
-    packages = ["signal_utils"],
-    platforms = 'any',
-    install_requires = reqs,
+    version="0.1.8",
+    author="Vasiliy Chernov",
+    packages=["signal_utils"],
+    platforms='any',
+    install_requires=reqs,
+    data_files=[('signal_utils/data', 
+                 ['signal_utils/data/mlp_classifier.h5'])]
 )
