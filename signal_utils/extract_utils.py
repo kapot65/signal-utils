@@ -1,13 +1,114 @@
 ﻿import collections
+from os import path
 
 import numpy as np
 from tqdm import tqdm
-
+from keras.models import load_model
 from scipy.optimize import curve_fit
 from scipy.signal import argrelextrema
 
 from gdrive_utils import load_dataset, get_points_drom_drive
 from generation_utils import gen_multiple
+
+
+def extract_fit_all(data, threshold, start_time, sample_freq,
+                    pos_step=2.0, amp_step=500.0):
+    """
+      Выделение событий с помощью фитирования всех событий одновременно. 
+      Классификация наложений производится полносвязной нейронной сетью.
+      
+      Алгоритм требует высокой производительности, но дает наиболее точный 
+      результат.
+      
+      Алгоритм:
+          1. Выделение локальных максимумов в кадре выше порога. Локальные 
+          максимумы считаются предварительными пиками.
+          2. Классификация наложенных событий с помощью НС по предварительным
+          пикам.
+          3. Одновременное фитирование всех пиков. В качестве начальных данных
+          берутся предварительные пики и соответсвующие им амплитуды. Диапазоны
+          фитирования задаются значениями pos_step и amp_step.
+          
+    """
+    peaks = get_peaks(data, threshold)
+    
+    if not len(peaks):
+        return np.array([]), np.array([])
+    
+    prep_peaks = np.vstack([data[peak - extract_fit_all.l_off: \
+                                 peak + extract_fit_all.r_off]\
+                           for peak in peaks])
+    singles = extract_fit_all.model.predict(prep_peaks/extract_fit_all.x_max)\
+                           .argmax(axis=1).astype(np.bool)
+                           
+    params = extract_events_fit_all(data, threshold, amp_step, pos_step)
+    
+    params[1::2] = ((params[1::2]/sample_freq)*1e+9) + start_time
+    
+    return params, singles
+
+extract_fit_all.model = load_model(path.join(path.dirname(__file__), 
+                                             "data/mlp_classifier.h5"))
+extract_fit_all.frame_len = 50
+extract_fit_all.l_off = 10   
+extract_fit_all.r_off = extract_fit_all.frame_len - extract_fit_all.l_off
+extract_fit_all.x_min = -32768
+extract_fit_all.x_max = 32768
+
+
+def extract_simple_amps(data, threshold, start_time, sample_freq):
+    """
+      Выделение событий поиском локальных максимумов выше порога.
+      
+      Алгоритм является наиболее быстрым, однако он не учитывает форму сигнала,
+      что приводит к систематической ошибке выделения амлитуд близких событий
+      (событие попадает на хвост другого события).
+      
+    """
+    
+    peaks = get_peaks(data, threshold)
+    
+    params = np.zeros(len(peaks)*2, np.float32)
+    params[0::2] = data[peaks]
+    params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
+    singles = np.ones(peaks.shape, np.bool)
+    
+    return params, singles
+
+
+def extract_amps_approx(data, threshold, start_time, sample_freq):
+    """
+      Последовательное выделение событий из блока с вычитанием предыдущих 
+      событий.
+      
+      Алгоритм имеет меньшую скорость работы по сравнению с 
+      extract_simple_amps, однако учитывет форму сигнала.
+      
+      Алгоритм:
+          1. Выделение локальных максимумов в кадре выше порога.
+          2. Последовательная обработка пиков:
+              1. Сохранение амплитуды и положения текущего пика.
+              2. Вычитание из данных формы сигнала, соответсвующей выделенным
+              амплитуде и положению текущего события.
+              3. Переход к следующему событию.
+      
+    """
+    
+    peaks = get_peaks(data, threshold)
+    
+    params = np.zeros(len(peaks)*2, np.float32)
+    params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
+          
+    x = np.arange(len(data))
+    for i in range(len(peaks)):
+        peak = peaks[i]
+        amp = data[peak]
+        params[i*2] = amp     
+        data -= gen_multiple(x, amp, peak) 
+    
+    singles = np.ones(peaks.shape, np.bool)
+    
+    return params, singles
 
 
 def apply_zsupression(data: np.ndarray, threshold: int=500, 
@@ -77,7 +178,7 @@ def get_peaks(ev, threshold):
     points = extremas[0][ev[extremas] >= threshold]
     
     if len(points) >= 2:
-        planes = np.where(points[1:] - points[:-1] == 1)[0] + 1
+        planes = np.where(points[1:] - points[:-1] <= 3)[0] + 1
         points = np.delete(points, planes)
     
     return points
@@ -114,19 +215,33 @@ def extract_events_fit(ev, threshold):
     return values
 
 
-def extract_events_fit_all(ev, threshold):
+def extract_events_fit_all(ev, threshold, pos_step=2.0, amp_step=500.0):
     """
       Последовательное выделение событий из блока
       Все события фитируются одновременно.
       
       @ev - массив события
       @threshold - порог
+      @pos_step - максимальное отклонение по положению при фитировании
+      @amp_step - максимальное положительное отклонение по амплитуде при 
+      фитировании. Нижняя граница всегда равна 0.
       @return параметры событий в формате [amp1, pos1, amp2, pos2, ...]
       
     """
-    points = get_peaks(ev, threshold)
-
-    values = np.hstack([calc_center(ev, point) for point in points])
+    points = get_peaks(ev, threshold)   
+    
+    values = np.zeros(len(points)*2)
+    values[0::2] = ev[points]
+    values[1::2] = points
+    
+    upper_bounds = values.copy()
+    upper_bounds[1::2] = upper_bounds[1::2] + pos_step
+    upper_bounds[0::2] = upper_bounds[0::2] + amp_step
+                
+    lower_bounds = values.copy()
+    lower_bounds[1::2] = lower_bounds[1::2] - pos_step
+    lower_bounds[0::2] = 0
+    
     full_func = lambda x, *values: gen_multiple(x, *values)
     popt, pcov = curve_fit(full_func, np.arange(len(ev)), ev, p0=list(values))
 
