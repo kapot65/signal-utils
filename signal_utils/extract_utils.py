@@ -50,7 +50,7 @@ def extract_fit_all(data, threshold, start_time, sample_freq,
 extract_fit_all.model = load_model(path.join(path.dirname(__file__), 
                                              "data/mlp_classifier.h5"))
 extract_fit_all.frame_len = 50
-extract_fit_all.l_off = 10   
+extract_fit_all.l_off = 14   
 extract_fit_all.r_off = extract_fit_all.frame_len - extract_fit_all.l_off
 extract_fit_all.x_min = -32768
 extract_fit_all.x_max = 32768

@@ -89,6 +89,10 @@ def test_algoritm(algoritm_func,
       @max_amp - максимальная амлитуда генерируемого события 
       
     """
+    global data
+    global pos_extracted
+    global singles_detected
+    global singles_real
 
     amps_real = np.array([])
     pos_real = np.array([])
@@ -142,21 +146,50 @@ def test_algoritm(algoritm_func,
     print("false positives %s (%s)"%(false_pos, false_pos/len(pos_real)))
     
     print("Singles/doubles: ")
-    singles_detected = idxs_raw[np.where(singles_extracted==False)]
+    singles_detected = np.arange(len(singles_extracted))\
+    [np.where(singles_extracted==False)]
     singles_real = single_idxs[counts > 1]
     singles_real = singles_real[singles_real != -1]
     
     singles_real_dists = []
+    singles_real_amps = []
     for idx in singles_real:
         doubles_real_pos = pos_real[idxs_raw == idx]
+        doubles_real_amps = amps_real[idxs_raw == idx]
         singles_real_dists.append(doubles_real_pos[1:] - doubles_real_pos[:-1])
+        singles_real_amps.append(np.log(doubles_real_amps[1:]/
+                                        doubles_real_amps[:-1]))
+        
         
     singles_real_dists = np.hstack(singles_real_dists)
+    singles_real_amps = np.hstack(singles_real_amps)
+    
+    singles_det_dists = []
+    singles_det_amps = []
+    for idx in singles_detected:
+        doubles_real_pos = pos_real[idxs_raw == idx]
+        doubles_real_amps = amps_real[idxs_raw == idx]
+        if len(doubles_real_amps) > 1:
+            singles_det_dists.append(doubles_real_pos[1:] - 
+                                     doubles_real_pos[:-1])
+            singles_det_amps.append(np.log(doubles_real_amps[1:]/
+                                            doubles_real_amps[:-1]))
+        
+    singles_det_dists = np.hstack(singles_det_dists)
+    singles_det_amps = np.hstack(singles_det_amps)
     
     
-    fig, ax = plt.subplots(2, 2)
-    ax[0][0].set_title("real doubles dists")
-    ax[0][0].hist(singles_real_dists, 40)
+    fig, ax = plt.subplots(3, 2)
+    hist, bins = np.histogram(singles_real_dists, 40)
+    hist_det, bins = np.histogram(singles_det_dists, bins=bins)
+    ax[2][0].set_title("real doubles")
+    ax[2][0].hist2d(singles_real_dists, singles_real_amps)
+    ax[2][1].set_title("detected doubles")
+    ax[2][1].hist2d(singles_det_dists, singles_det_amps)
+    ax[0][0].set_title("real/detected doubles dists cumsums")
+    ax[0][0].plot(bins[1:], np.cumsum(hist), label='real')
+    ax[0][0].plot(bins[1:], np.cumsum(hist_det), label='detected')
+    ax[0][0].legend()
     
     print("%s detected \n"\
           "%s real \n"\
@@ -191,6 +224,6 @@ def test_algoritm(algoritm_func,
 if __name__ == '__main__':
     
     from pylab import rcParams
-    from extract_utils import extract_amps_approx
-    rcParams['figure.figsize'] = 20, 10
-    test_algoritm(extract_amps_approx)
+    from extract_utils import extract_fit_all
+    rcParams['figure.figsize'] = 10, 10
+    test_algoritm(extract_fit_all, b_size=1048576*2)
