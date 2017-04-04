@@ -20,6 +20,10 @@ setup(
     packages=["signal_utils"],
     platforms='any',
     install_requires=reqs,
-    data_files=[('signal_utils/data', 
-                 ['signal_utils/data/mlp_classifier.h5'])]
+    include_package_data=True,
+    package_data={
+        "signal_utils.data": [
+            "mlp_classifier.h5"
+        ],
+    }
 )
