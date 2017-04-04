@@ -7,4 +7,5 @@ PyDrive
 pandas
 keras==2.0.2
 tensorflow==1.0.1
+matplotlib
 h5py

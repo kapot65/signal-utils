@@ -174,9 +174,10 @@ def test_algoritm(algoritm_func,
                                      doubles_real_pos[:-1])
             singles_det_amps.append(np.log(doubles_real_amps[1:]/
                                             doubles_real_amps[:-1]))
-        
-    singles_det_dists = np.hstack(singles_det_dists)
-    singles_det_amps = np.hstack(singles_det_amps)
+    
+    if len(singles_det_dists):
+        singles_det_dists = np.hstack(singles_det_dists)
+        singles_det_amps = np.hstack(singles_det_amps)
     
     
     fig, ax = plt.subplots(3, 2)
