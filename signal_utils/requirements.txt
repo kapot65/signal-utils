@@ -6,3 +6,4 @@ tqdm
 PyDrive
 pandas
 keras
+h5py
