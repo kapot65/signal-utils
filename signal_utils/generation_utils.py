@@ -49,11 +49,12 @@ def gen_signal(x, ampl, pos,
     return ((gauss(x - pos) + spike(spike_x)*tail_amp)*ampl)
 
 
-def gen_multiple(x, *args, l_size=50, r_size=100):
+def gen_multiple(x, *args, l_size=10, r_size=100):
     """
       Функция нескольких событий. Для ускорения работы генерируемый сигнал
       обрезается после l_size от пика слева и на r_size от пика справа.
       
+      @x - упорядоченная сетка
       @a - амплитуда текущего события
       @p - положение пика текущего события
       @args - последовательно указанные амплитуды 
@@ -65,11 +66,16 @@ def gen_multiple(x, *args, l_size=50, r_size=100):
     assert(not len(args)%2)
 
     y = np.zeros(len(x), np.float32)
+    
+    l_vals = np.searchsorted(x, [args[i + 1] - l_size for 
+                                 i in range(0, len(args), 2)])
+    r_vals = np.searchsorted(x, [args[i + 1] + r_size for 
+                                 i in range(0, len(args), 2)])
 
     for i in range(0, len(args), 2):
-        block = np.logical_and(x > args[i + 1] - l_size, 
-                               x < args[i + 1] + r_size)
-        y[block] = y[block] + gen_signal(x[block], args[i], args[i + 1])
+        n = i//2
+        y[l_vals[n]:r_vals[n]] += gen_signal(x[l_vals[n]:r_vals[n]], \
+                                             args[i], args[i + 1])
 
     return y
 

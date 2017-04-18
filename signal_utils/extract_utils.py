@@ -8,10 +8,10 @@ from scipy.optimize import curve_fit
 from scipy.signal import argrelextrema
 
 from gdrive_utils import load_dataset, get_points_drom_drive
-from generation_utils import gen_multiple
+from generation_utils import gen_multiple, gen_signal
 
 
-def extract_fit_all(data, threshold, start_time, sample_freq,
+def extract_fit_all(data, start_time, threshold, sample_freq,
                     pos_step=2.0, amp_step=500.0):
     """
       Выделение событий с помощью фитирования всех событий одновременно. 
@@ -56,7 +56,7 @@ extract_fit_all.x_min = -32768
 extract_fit_all.x_max = 32768
 
 
-def extract_simple_amps(data, threshold, start_time, sample_freq):
+def extract_simple_amps(data, start_time, threshold, sample_freq):
     """
       Выделение событий поиском локальных максимумов выше порога.
       
@@ -76,7 +76,7 @@ def extract_simple_amps(data, threshold, start_time, sample_freq):
     return params, singles
 
 
-def extract_amps_approx(data, threshold, start_time, sample_freq):
+def extract_amps_approx(data, start_time, threshold, sample_freq):
     """
       Последовательное выделение событий из блока с вычитанием предыдущих 
       событий.
@@ -93,18 +93,44 @@ def extract_amps_approx(data, threshold, start_time, sample_freq):
               3. Переход к следующему событию.
       
     """
-    
+    data = data.copy()
     peaks = get_peaks(data, threshold)
     
     params = np.zeros(len(peaks)*2, np.float32)
     params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
-          
+
     x = np.arange(len(data))
     for i in range(len(peaks)):
         peak = peaks[i]
         amp = data[peak]
         params[i*2] = amp     
         data -= gen_multiple(x, amp, peak) 
+    
+    singles = np.ones(peaks.shape, np.bool)
+    
+    return params, singles
+
+
+def extract_amps_approx2(data, start_time, threshold, sample_freq):
+    """
+      Последовательное выделение событий из блока с вычитанием предыдущих 
+      событий.
+      
+      Ускоренный вариант extract_amps_approx. Вместо вычета события из всего 
+      кадра, событие вычитается только из пиков. 
+      
+      Примерно на 30% медленее extract_simple_amps.
+      
+    """
+    
+    peaks = get_peaks(data, threshold)
+    
+    params = np.zeros(len(peaks)*2, np.float32)
+    params[0::2] = data[peaks]
+    params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
+    
+    for i, peak in enumerate(peaks[:-1]):
+        params[(i + 1)*2::2] -= gen_signal(peaks[i + 1:], params[i*2], peak)
     
     singles = np.ones(peaks.shape, np.bool)
     
@@ -174,8 +200,8 @@ def get_peaks(ev, threshold):
       @threshold - порог
       
     """
-    extremas = argrelextrema(ev, np.greater_equal)
-    points = extremas[0][ev[extremas] >= threshold]
+    extremas = argrelextrema(ev, np.greater_equal)[0]
+    points = extremas[ev[extremas] >= threshold]
     
     if len(points) >= 2:
         planes = np.where(points[1:] - points[:-1] <= 3)[0] + 1

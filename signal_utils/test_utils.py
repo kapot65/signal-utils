@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from functools import partial
+from multiprocess import Pool, cpu_count
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,14 +32,14 @@ def _extract_events(data, positions, ev_pre_l, ev_pre_r, sample_freq):
             frames_extr[i] = data[pos - ev_pre_l: pos + ev_pre_r]
             
     return frames_extr
-    
+
 
 def _generate_block(b, algoritm_func, max_pos_err, 
                     threshold, area_l, area_r, 
                     freq, sample_freq, b_size, 
                     min_amp, max_amp,
                     ev_pre_l: int=10,
-                    ev_pre_r: int=50):
+                    ev_pre_r: int=50, use_mp=False):
     """
       Генерация кадра и выделение из него событий.
       
@@ -80,16 +81,42 @@ def _generate_block(b, algoritm_func, max_pos_err,
     params_extracted = []
     singles_extracted = []
     
-    time_start = datetime.now()
-    for i in range(len(blocks)):
-        block = data[blocks[i][0]:blocks[i][1]]
-        events, singles = algoritm_func(block, threshold, 
-                                        times[i], sample_freq)
-        params_extracted.append(events)
-        singles_extracted.append(singles)
-    delta = (datetime.now() - time_start).total_seconds()
     
-    params_extracted = np.hstack(params_extracted)
+    if use_mp:
+        def _process_worker(i, data, algoritm_func, 
+                            blocks, times, threshold, 
+                            sample_freq):
+            block = data[blocks[i][0]:blocks[i][1]]
+            
+            events, singles = algoritm_func(block, times[i], threshold, sample_freq)
+            
+            return events, singles
+    
+        pool = Pool(cpu_count())
+        func = partial(_process_worker, data=data, algoritm_func=algoritm_func, 
+                       blocks=blocks, times=times, 
+                       threshold=threshold, sample_freq=sample_freq)
+    
+        time_start = datetime.now()
+        
+        ret = np.array(pool.map(func, range(len(blocks))))
+        delta = (datetime.now() - time_start).total_seconds()
+        params_extracted = np.hstack(ret[:, 0])
+        singles_extracted = np.hstack(ret[:, 1])
+    
+    else:
+        time_start = datetime.now()
+        for i in range(len(blocks)):
+            block = data[blocks[i][0]:blocks[i][1]]
+            events, singles = algoritm_func(block, times[i], 
+                                            threshold, sample_freq)
+            params_extracted.append(events)
+            singles_extracted.append(singles)
+            
+        delta = (datetime.now() - time_start).total_seconds()
+        params_extracted = np.hstack(params_extracted)
+        singles_extracted = np.hstack(singles_extracted)
+    
     
     amps_real = params[0::2]
     pos_real = (params[1::2]/sample_freq)*1e+9
@@ -103,8 +130,6 @@ def _generate_block(b, algoritm_func, max_pos_err,
     frames_extr = _extract_events(data, pos_extracted, 
                                   ev_pre_l, ev_pre_r, 
                                   sample_freq)
-    
-    singles_extracted = np.hstack(singles_extracted)
     
     return amps_real, pos_real + block_off, frames_real,\
            amps_extracted,  pos_extracted + block_off, frames_extr,\
@@ -283,8 +308,8 @@ def test_algoritm(algoritm_func,
       @algoritm_func - функция выделения событий из данных.
       Входные аргументы функции:
           - data - данные блока (np.array)
-          - threshold - порог
           - start_time - начало блока в наносекундах
+          - threshold - порог
           - sample_freq - частота оцифровки данных
       Выходные аргументы функции:  
           (params, singles)
@@ -341,8 +366,9 @@ def test_algoritm(algoritm_func,
 if __name__ == '__main__':
     
     from pylab import rcParams
-    from extract_utils import extract_fit_all
+    from extract_utils import extract_amps_approx2
+    
     rcParams['figure.figsize'] = 10, 10
-    res = test_algoritm(extract_fit_all, b_size=int(1048576), n_blocks=1)
+    res = test_algoritm(extract_amps_approx2, b_size=int(1048576), n_blocks=5)
     draw_metrics(res)
     
