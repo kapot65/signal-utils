@@ -30,6 +30,10 @@ def extract_fit_all(data, start_time, threshold, sample_freq,
           фитирования задаются значениями pos_step и amp_step.
           
     """
+    if not extract_fit_all.model:
+        extract_fit_all.model = load_model(path.join(path.dirname(__file__), 
+                                           "data/mlp_classifier.h5"))
+    
     peaks = get_peaks(data, threshold)
     
     if not len(peaks):
@@ -47,8 +51,7 @@ def extract_fit_all(data, start_time, threshold, sample_freq,
     
     return params, singles
 
-extract_fit_all.model = load_model(path.join(path.dirname(__file__), 
-                                             "data/mlp_classifier.h5"))
+extract_fit_all.model = None
 extract_fit_all.frame_len = 50
 extract_fit_all.l_off = 14   
 extract_fit_all.r_off = extract_fit_all.frame_len - extract_fit_all.l_off
