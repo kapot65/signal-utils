@@ -3,7 +3,6 @@ from os import path
 
 import numpy as np
 from tqdm import tqdm
-from keras.models import load_model
 from scipy.optimize import curve_fit
 from scipy.signal import argrelextrema
 
@@ -31,6 +30,8 @@ def extract_fit_all(data, start_time, threshold, sample_freq,
           
     """
     if not extract_fit_all.model:
+        if not 'load_model' in locals():
+            from keras.models import load_model
         extract_fit_all.model = load_model(path.join(path.dirname(__file__), 
                                            "data/mlp_classifier.h5"))
     
