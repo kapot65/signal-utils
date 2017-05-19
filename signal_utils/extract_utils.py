@@ -6,7 +6,7 @@ from tqdm import tqdm
 from scipy.optimize import curve_fit
 from scipy.signal import argrelextrema
 
-from gdrive_utils import load_dataset, get_points_drom_drive
+from gdrive_utils import load_dataset
 from generation_utils import gen_multiple, gen_signal
 
 
@@ -72,8 +72,9 @@ def extract_simple_amps(data, start_time, threshold, sample_freq):
     
     peaks = get_peaks(data, threshold)
     
-    params = np.zeros(len(peaks)*2, np.float32)
+    params = np.zeros(len(peaks)*2, np.float64)
     params[0::2] = data[peaks]
+    #print(peaks/sample_freq*1e+9)
     params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
     singles = np.ones(peaks.shape, np.bool)
     
@@ -125,6 +126,7 @@ def extract_amps_approx2(data, start_time, threshold, sample_freq):
       
       Примерно на 30% медленее extract_simple_amps.
       
+      @todo: Разобраться с сохранением времени в наносекундах
     """
     
     peaks = get_peaks(data, threshold)
@@ -139,32 +141,6 @@ def extract_amps_approx2(data, start_time, threshold, sample_freq):
     singles = np.ones(peaks.shape, np.bool)
     
     return params, singles
-
-
-def apply_zsupression(data: np.ndarray, threshold: int=500, 
-                          area_l: int=50, area_r: int=100) -> tuple:
-    """
-      Обрезание шумов в файле данных платы Лан10-12PCI
-      
-      Функция расчитана на файлы данных с максимальным размером кадра
-      (непрерывное считывание с платы).
-      
-      @data - данные кадра (отдельный канал)
-      @threshold - порог амплитуды события
-      @area_l - область около события, которая будет сохранена
-      @area_r - область около события, которая будет сохранена
-      
-      @return список границ события
-      
-    """
-    peaks = np.where(data > threshold)[0]
-    dists = peaks[1:] - peaks[:-1]
-    gaps = np.append(np.array([0]), np.where(dists > area_r)[0] + 1)
-    
-    events = ((peaks[gaps[gap]] - area_l, peaks[gaps[gap + 1] - 1] + area_r) 
-              for gap in range(0, len(gaps) - 1))
-    
-    return events
 
 
 def calc_center(ev, amp_arg, step=2):
@@ -389,28 +365,3 @@ def extract_events(data, threshold=700):
         events.append([left, center, right])
         
     return events
-
-
-def test_functions():
-    
-    import matplotlib.pyplot as plt
-    
-    from draw_utils import draw_event, plot_event, plot_multiple_events
-    
-    points = get_points_drom_drive()
-    points.sort_values('time', ascending=False)
-    
-    bin_sec = get_bin_sec(points, 0)
-    blocks = get_blocks(points, 0)
-    
-    fig, ax = plt.subplots()
-    
-    draw_event(blocks[0], 0, fig, ax)
-    
-    fig, ax = plt.subplots()
-    event = extract_algo(blocks[0])
-    plot_event(blocks[0], 0, event, ax, threshold=700, bin_sec=bin_sec)
-    
-    fig, ax = plt.subplots()
-    events = extract_events(blocks[0])
-    plot_multiple_events(blocks[0], events, ax, threshold=700, bin_sec=bin_sec)

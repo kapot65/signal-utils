@@ -16,8 +16,33 @@ cur_dir = path.dirname(path.realpath(__file__))
 if not cur_dir in sys.path: sys.path.append(cur_dir)
 del cur_dir
 
-from extract_utils import apply_zsupression
+
+def apply_zsupression(data: np.ndarray, threshold: int=500, 
+                          area_l: int=50, area_r: int=100) -> tuple:
+    """
+      Обрезание шумов в файле данных платы Лан10-12PCI
+      
+      Функция расчитана на файлы данных с максимальным размером кадра
+      (непрерывное считывание с платы).
+      
+      @data - данные кадра (отдельный канал)
+      @threshold - порог амплитуды события
+      @area_l - область около события, которая будет сохранена
+      @area_r - область около события, которая будет сохранена
+      
+      @return список границ события
+      
+    """
+    peaks = np.where(data > threshold)[0]
+    dists = peaks[1:] - peaks[:-1]
+    gaps = np.append(np.array([0]), np.where(dists > area_r)[0] + 1)
+    
+    events = ((peaks[gaps[gap]] - area_l, peaks[gaps[gap + 1] - 1] + area_r) 
+              for gap in range(0, len(gaps) - 1))
+    
+    return events
         
+
 def rsb_to_df(ext_meta: dict, rsb_file, 
               threshold: int=500, area_l: int=50, 
               area_r: int=100) -> (dict, bytearray, int):

@@ -2,13 +2,12 @@
 
 from datetime import datetime
 from functools import partial
-from multiprocess import Pool, cpu_count
 
 import numpy as np
-import matplotlib.pyplot as plt
+from dfparser import Point
 
+from draw_utils import draw_metrics
 from generation_utils import gen_raw_block
-from extract_utils import apply_zsupression
 
 
 def _extract_events(data, positions, ev_pre_l, ev_pre_r, sample_freq):
@@ -16,7 +15,7 @@ def _extract_events(data, positions, ev_pre_l, ev_pre_r, sample_freq):
       Вырезание кадров событий из данных
       
       @data - массив данных сигнала
-      @positions - массив положений пиков в наносекундах с начала кадра
+      @positions - массив положений пиков в секундах с начала кадра
       @ev_pre_l - размер кадра сохраняемого события слева от пика
       @ev_pre_r - размер кадра сохраняемого события справа от пика
       @sample_freq
@@ -34,12 +33,81 @@ def _extract_events(data, positions, ev_pre_l, ev_pre_r, sample_freq):
     return frames_extr
 
 
+def process_data(df_meta, df_data, block_params,
+                 algoritm_func, 
+                 max_pos_err,
+                 ev_pre_l: int=10,
+                 ev_pre_r: int=50):
+    
+    p = Point()
+    p.ParseFromString(df_data)
+    
+    sample_freq = df_meta['params']['sample_freq']
+    threshold = df_meta['process_params']['threshold']
+    
+    params_extracted = []
+    singles_extracted = []
+    
+    time_start = datetime.now()
+    
+    for ch in p.channels:
+        for block in ch.blocks:
+            print(block.time)
+            for event in block.events:
+                
+                data = np.frombuffer(event.data, np.int16)
+                events, singles = algoritm_func(data, block.time + event.time, 
+                                                threshold, sample_freq)
+                params_extracted.append(events)
+                singles_extracted.append(singles) 
+        
+    delta = (datetime.now() - time_start).total_seconds()
+    
+    params_extracted = np.hstack(params_extracted)
+    singles_extracted = np.hstack(singles_extracted)
+    
+    amps_extracted = params_extracted[0::2]
+    pos_extracted = params_extracted[1::2]
+    
+    amps_real = block_params[0::2]
+    pos_real = block_params[1::2]
+    
+    frames_real = []
+    frames_extr = []
+    
+    for ch in p.channels:
+        for block in ch.blocks:
+            for event in block.events:
+                #pos_extracted[np.searchsorted()]
+                print(block.time)
+                raise Exception
+                pass
+                           
+    '''
+    frames_real = _extract_events(data, pos_real, 
+                                  ev_pre_l, ev_pre_r, 
+                                  sample_freq)
+    
+    
+    
+    frames_extr = _extract_events(data, pos_extracted, 
+                                  ev_pre_l, ev_pre_r, 
+                                  sample_freq)
+    '''
+    return amps_real, pos_real, amps_extracted,  pos_extracted,
+    singles_extracted, delta
+    
+          
+
+#from extract_utils import extract_simple_amps
+#out = process_data(meta, data, block_params, extract_simple_amps, 5000)
+
 def _generate_block(b, algoritm_func, max_pos_err, 
                     threshold, area_l, area_r, 
                     freq, sample_freq, b_size, 
                     min_amp, max_amp,
                     ev_pre_l: int=10,
-                    ev_pre_r: int=50, use_mp=False):
+                    ev_pre_r: int=50):
     """
       Генерация кадра и выделение из него событий.
       
@@ -82,44 +150,21 @@ def _generate_block(b, algoritm_func, max_pos_err,
     singles_extracted = []
     
     
-    if use_mp:
-        def _process_worker(i, data, algoritm_func, 
-                            blocks, times, threshold, 
-                            sample_freq):
-            block = data[blocks[i][0]:blocks[i][1]]
-            
-            events, singles = algoritm_func(block, times[i], threshold, sample_freq)
-            
-            return events, singles
-    
-        pool = Pool(cpu_count())
-        func = partial(_process_worker, data=data, algoritm_func=algoritm_func, 
-                       blocks=blocks, times=times, 
-                       threshold=threshold, sample_freq=sample_freq)
-    
-        time_start = datetime.now()
+    time_start = datetime.now()
+    for i in range(len(blocks)):
+        block = data[blocks[i][0]:blocks[i][1]]
+        events, singles = algoritm_func(block, times[i], 
+                                        threshold, sample_freq)
+        params_extracted.append(events)
+        singles_extracted.append(singles)
         
-        ret = np.array(pool.map(func, range(len(blocks))))
-        delta = (datetime.now() - time_start).total_seconds()
-        params_extracted = np.hstack(ret[:, 0])
-        singles_extracted = np.hstack(ret[:, 1])
-    
-    else:
-        time_start = datetime.now()
-        for i in range(len(blocks)):
-            block = data[blocks[i][0]:blocks[i][1]]
-            events, singles = algoritm_func(block, times[i], 
-                                            threshold, sample_freq)
-            params_extracted.append(events)
-            singles_extracted.append(singles)
-            
-        delta = (datetime.now() - time_start).total_seconds()
-        params_extracted = np.hstack(params_extracted)
-        singles_extracted = np.hstack(singles_extracted)
+    delta = (datetime.now() - time_start).total_seconds()
+    params_extracted = np.hstack(params_extracted)
+    singles_extracted = np.hstack(singles_extracted)
     
     
     amps_real = params[0::2]
-    pos_real = (params[1::2]/sample_freq)*1e+9
+    pos_real = params[1::2]*1e+9
     frames_real = _extract_events(data, pos_real, 
                                   ev_pre_l, ev_pre_r, 
                                   sample_freq)
@@ -137,10 +182,65 @@ def _generate_block(b, algoritm_func, max_pos_err,
            
 
 def _calc_metrics(amps_real, pos_real, frames_real, 
-                 amps_extracted, pos_extracted, frames_extracted, 
-                 singles_extracted, delta, max_pos_err):
+                  amps_extracted, pos_extracted, frames_extracted, 
+                  singles_extracted, delta, max_pos_err):
     """
-      Вычисление метрик
+      Вычисление метрик.
+      
+      Описание алгоритма см в signal_utils.test_utils.test_algoritm
+      
+      @amps_real -- массив амплитуд реальных событий
+      @pos_real -- массив положений реальных событий в наносекундах
+      @frames_real -- кадры реальных событий
+      @amps_extracted -- массив амплитуд выделенных событий
+      @pos_extracted -- массив амплитуд выделенных положений в наносекундах
+      @frames_extracted -- кадры выделенных событий
+      @singles_extracted -- массив классификаций выделенных событий по 
+      наложенности
+      @delta -- время выполнения алгоритма в секундах
+      @max_pos_err -- максимальное допустимое отличие положений реального 
+      события и соответсвующего ему выделенного события в наносекундах
+      
+      @return -- Рассчитанные метрики. Пример метрики:
+          {
+            'amps_extracted': array([ 2463.82592773, ...,  5950.55712891], 
+                                    dtype=float32),
+            'amps_real': array([ 1547.03479004, ...,963.0748291 ], 
+                               dtype=float32),
+            'doubles_detected': array([], dtype=int32),
+            'doubles_real': array([  33,  ..., 3719], dtype=int64),
+            'false_negatives': array([   0, ..., 4025]),
+            'false_positives': array([2593, 2742]),
+            'frames_extracted': array([[ 256. ..., 28.80752563],   
+                                       ..., 
+                                       [-144., ..., -334.03234863]], 
+                                      dtype=float32),
+            'frames_real': array([[  96., ..., -45.58765411],
+                                  ..., 
+                                  [-624.06677246, ..., -64.64994812]], 
+                                 dtype=float32),
+            'pos_extracted': array([  6.14400000e+04, ..., 3.35321920e+08], 
+                                   dtype=float32),
+            'pos_real': array([  1.50009424e+04, ..., 3.35438528e+08], 
+                              dtype=float32),
+            'real_detected_transitions': array([-1, ..., -1], dtype=int64),
+            'singles_extracted': array([ True, ...,  True], dtype=bool),
+            'time_elapsed': 0.081999,
+            'total_detected': 3860,
+            'total_real': 4026
+         }
+         Здесь:
+             doubles_detected -- индексы событий, классифицированных как
+             наложенные
+             doubles_real -- индексы реальных наложенных событий.
+             false_negatives -- индексы неопределенных классификатором событий
+             false_positives -- индексы ложно определенных событий
+             real_detected_transitions -- Массив соответсвия между рельными и
+             выделенными событиями. Если соответсвия нету - индекс 
+             прирванивается -1.
+             time_elapsed -- время выполнения алгоритма в секундах
+             total_detected -- общее количество выделенных событий
+             total_real -- общее количество реальных событий
       
     """
     metrics = {}
@@ -166,88 +266,6 @@ def _calc_metrics(amps_real, pos_real, frames_real,
                                   [np.where(singles_extracted==False)]
                                   
     return metrics
-           
-          
-def draw_metrics(metrics: dict):
-    """
-      Отрисовка метрик
-      
-    """
-    print("Summary: ")
-    print("Algoritm time: %s s"%(metrics["time_elapsed"]))
-    print("Total events: %s"%(metrics["total_real"]))
-    print("Detected events: %s"%(metrics["total_detected"]))
-    print("Positives/negatives: ")
-    print("False negatives %s"%(len(metrics["false_negatives"])))
-    print("False positives %s"%(len(metrics["false_positives"])))
-    
-    idxs_raw = metrics["real_detected_transitions"]
-    
-    def get_dbl_amps_dists(idxs):
-        
-        dists, amps = [], []
-        
-        for idx in idxs:
-            doubles_pos = metrics["pos_real"][idxs_raw == idx]
-            doubles_amps = metrics["amps_real"][idxs_raw == idx]
-            dists.append(doubles_pos[1:] - doubles_pos[:-1])
-            amps.append(np.log(doubles_amps[1:], 
-                               doubles_amps[:-1]))
-        
-        if len(dists):
-            dists = np.hstack(dists)
-            amps = np.hstack(amps)
-            return amps, dists
-        else:
-            return np.array([]), np.array([])
-    
-    dbl_amps_real, dbl_dists_real = get_dbl_amps_dists(metrics["doubles_real"])
-    dbl_amps_det, \
-    dbl_dists_det = get_dbl_amps_dists(metrics["doubles_detected"])
-    
-    fig, ax = plt.subplots(3, 2)
-    hist, bins = np.histogram(dbl_dists_real, 40)
-    hist_det, bins = np.histogram(dbl_dists_det, bins=bins)
-    ax[2][0].set_title("real doubles")
-    ax[2][0].hist2d(dbl_dists_real, dbl_amps_real)
-    ax[2][1].set_title("detected doubles")
-    ax[2][1].hist2d(dbl_dists_det, dbl_amps_det)
-    ax[0][0].set_title("real/detected doubles dists cumsums")
-    ax[0][0].plot(bins[1:], np.cumsum(hist), label='real')
-    ax[0][0].plot(bins[1:], np.cumsum(hist_det), label='detected')
-    ax[0][0].legend()
-    
-    print("%s detected \n"\
-          "%s real \n"\
-          "%s intersection"%(len(metrics["doubles_detected"]),
-                             len(metrics["doubles_real"]),
-                             len(np.intersect1d(metrics["doubles_detected"],
-                                                metrics["doubles_real"]))))
-    
-    print("Amplitude accuracy:")
-    error = metrics["amps_real"][idxs_raw != -1] - \
-            metrics["amps_extracted"][idxs_raw[idxs_raw != -1]]
-            
-    ax[0][1].set_title("amplitude error")
-    ax[0][1].hist(error, 40)
-    
-    ax[1][1].set_title("negative_amplitudes error")
-    ax[1][1].hist(metrics["amps_real"][np.where(idxs_raw == -1)[0]], 40)
-    
-    
-    idxs_raw[idxs_raw==-1]
-    
-    range_ = (min(metrics["amps_real"].min(), 
-                  metrics["amps_extracted"].min()),
-              max(metrics["amps_real"].max(), 
-                  metrics["amps_extracted"].max()))
-    
-    ax[1][0].set_title("amp hists")
-    ax[1][0].hist(metrics["amps_real"], 80, \
-                  fc=(1,0,0,0.5), label="real", range=range_)
-    ax[1][0].hist(metrics["amps_extracted"], 80, fc=(0,0,1,0.5),
-            label="extracted", range=range_)
-    ax[1][0].legend()
     
 
 def test_algoritm(algoritm_func,
@@ -361,14 +379,21 @@ def test_algoritm(algoritm_func,
             "frames_extracted": frames_extracted,         
             "singles_extracted": singles_extracted, 
             **metrics}
+
+
+def test_convertion_speed():
+    """
+    @todo: сделать функцию
+    """
+    pass
     
 
 if __name__ == '__main__':
     
     from pylab import rcParams
-    from extract_utils import extract_amps_approx2
+    from extract_utils import extract_simple_amps
     
     rcParams['figure.figsize'] = 10, 10
-    res = test_algoritm(extract_amps_approx2, b_size=int(1048576), n_blocks=5)
+    res = test_algoritm(extract_simple_amps, b_size=int(1048576), n_blocks=1)
     draw_metrics(res)
     

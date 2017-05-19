@@ -5,14 +5,40 @@ Created on Mon Feb 27 19:49:34 2017
 @author: kapot
 """
 
-import numpy as np
+import io
+from datetime import datetime
 
-def generate_noise(size):
-    noise = np.random.randint(-20, 20, size=(size + 15))
-    c1 = np.convolve(noise, np.full((10), 0.315), 'valid')
-    c2 = np.convolve(c1, np.full((3), 1/3), 'valid')
-    c3 = np.convolve(c2, np.full((3), 1/3), 'valid') + 2.5
-    return np.round(c3)
+import numpy as np
+from tqdm import tqdm
+from scipy.interpolate import interp1d
+from dfparser import dump_to_rsb
+from dfparser.df_data.def_values import def_rsh_params
+
+from convert_utils import rsb_to_df
+
+
+def generate_noise(x, base_freq=3125000.0):
+    """
+      @x - координаты в секундах
+      @base_freq - частота, при которой подбирались параметры сигнала
+      @return - шум для заданных координат
+
+    """
+    x_min = int(x.min()*base_freq - 2)
+    x_max = int(x.max()*base_freq + 2)
+    
+    x_orig = np.arange(x_min, x_max)
+    
+    noise = np.random.randint(-20, 20, size=len(x_orig))
+    c1 = np.convolve(noise, np.full((10), 0.315), 'same')
+    c2 = np.convolve(c1, np.full((3), 1/3), 'same')
+    c3 = np.convolve(c2, np.full((3), 1/3), 'same') + 2.5
+                    
+    noise_conv = np.round(c3)
+    
+    interp = interp1d(x_orig/base_freq, noise_conv, kind='nearest')
+    
+    return interp(x)*16
     
     
 def gen_signal(x, ampl, pos, 
@@ -20,27 +46,30 @@ def gen_signal(x, ampl, pos,
           tail_amp=0.37015974, 
           tail_factor=2.96038975,
           p=2.20563286,
-          s=0.0525933):
+          s=0.0525933,
+          base_freq=3125000.0):
     """
       Генерация сигнала
       
       Все аргументы, кроме @ampl и @pos подобраны под реальный сигнал.
       Рекомендуется оставить из значения по умолчанию
       
-      @x - координаты
+      @x - координаты в секундах
       @ampl - амплитуда генерируемого сигнала 
-      @pos - положение генерируемого сигнала
+      @pos - положение генерируемого сигнала в секундах
       @sigma - растяжение сигнала
       @tail_amp - отношение амлитуды выброса к амплитуде сигнала
       @tail_factor - степень резкости пика сигнала
       @p - степень гауссиана амплитуда
       @s - коэффициент растяжения выброса
-      @return сигнал для заданных координат
+      @base_freq - частота, при которой подбирались параметры сигнала
+      @return - сигнал для заданных координат
       
     """
-    gauss = lambda x: np.exp((-1/2)*np.power((np.abs(sigma*x)), p))
-    gauss_rev = lambda y: (1/sigma)*np.power(-2*np.log(y), 1/p)
-    spike = lambda x: (1/(1+2*x*s)**tail_factor - 1.0)*np.exp(-x*s)
+    
+    gauss = lambda x: np.exp((-1/2)*np.power((np.abs(sigma*x*base_freq)), p))
+    gauss_rev = lambda y: ((1/sigma)*np.power(-2*np.log(y), 1/p)/base_freq)
+    spike = lambda x: (1/(1+2*x*base_freq*s)**tail_factor - 1.0)*np.exp(-x*base_freq*s)
     
     spike_offset = gauss_rev(0.1) + pos
     spike_x = x - spike_offset
@@ -49,7 +78,7 @@ def gen_signal(x, ampl, pos,
     return ((gauss(x - pos) + spike(spike_x)*tail_amp)*ampl)
 
 
-def gen_multiple(x, *args, l_size=10, r_size=100):
+def gen_multiple(x, *args, l_size=10/3125000.0, r_size=100/3125000.0):
     """
       Функция нескольких событий. Для ускорения работы генерируемый сигнал
       обрезается после l_size от пика слева и на r_size от пика справа.
@@ -98,12 +127,152 @@ def gen_raw_block(freq: float=12e+3,
     
     events = int(freq*(b_size/sample_freq))
     
-    params = np.zeros(events*2, np.float32)
+    params = np.zeros(events*2, np.float64)
     
-    params[1::2] = np.sort(np.random.uniform(0,  b_size, events))
+    params[1::2] = np.sort(np.random.uniform(0,  b_size/sample_freq, events))
     params[0::2] = np.random.uniform(min_amp, max_amp, events)
     
-    x = np.arange(b_size)
+    x = np.arange(b_size)/sample_freq
     data = gen_multiple(x, *params)
     
-    return data + generate_noise(b_size - 2)*16, params
+    return data + generate_noise(x), params
+
+
+def generate_multiple_blocks(freq: float=12e+3, 
+                             sample_freq: float=3125000.0,
+                             b_size: int=1048576,
+                             min_amp: int=500, 
+                             max_amp: int=7000,
+                             time: float=30.0,
+                             block_write_time: float=0.05):
+    """
+        Генерация множественных блоков
+        
+        @freq - частота событий (на секунду)
+        @sample_freq - частота оцифровки Гц
+        @b_size - размер блока в бинах
+        @max_amp - максимальная амплитуда события
+        @min_amp - минимальная амплитуда события
+        @time - время набора в секундах
+        @block_write_time - cкорость записи блока; определяет мертвое время
+        (http://elog.mass.inr.ru/nu-mass/319)
+        @return - [data, [amp1, pos1, amp2, pos2, ...], start_times];
+        здесь data - данные блоков (block_num, block_size)
+        [amp1, pos1, amp2, pos2, ...] - массив событий: 
+            amp1 - амплитуда события в каналах 
+            pos1 - абсолютное положение события в наносекундах с начала первого
+            блока
+            start_times - массив в наносекундах стартовых времен для 
+            каждого блока
+    
+    """
+    block_time = ((b_size/sample_freq) + block_write_time)
+    blocks_num = round(time/block_time + 0.5)
+    
+    start_times = np.array([block_time*i for i in range(blocks_num)])
+    block_params = []
+
+    data = np.zeros((blocks_num, b_size), np.int16)
+    
+    for i in tqdm(range(blocks_num)):
+        out = gen_raw_block(freq, sample_freq, b_size, min_amp, max_amp)
+        data[i] = out[0]
+        out[1][1::2] += start_times[i]
+        block_params.append(out[1]*1e+9)
+   
+    block_params = np.hstack(block_params)
+    
+    return data, block_params, start_times*1e+9
+
+
+def generate_rsb(freq: float=12e+3, 
+                 sample_freq: float=3125000.0,
+                 b_size: int=1048576,
+                 min_amp: int=500, 
+                 max_amp: int=7000,
+                 time: float=30.0,
+                 block_write_time: float=0.05):
+    """
+      Генерация файла rsb с желаемой частотой событий
+    
+      @freq - частота событий (на секунду)
+      @sample_freq - частота оцифровки Гц
+      @b_size - размер блока в бинах
+      @max_amp - максимальная амплитуда события
+      @min_amp - минимальная амплитуда события
+      @time - время набора в секундах
+      @block_write_time - cкорость записи блока; определяет мертвое время
+      (http://elog.mass.inr.ru/nu-mass/319)
+      @return - [file_data, [amp1, pos1, amp2, pos2, ...]];
+      здесь file_data - данные сгенерированного rsb файла
+      [amp1, pos1, amp2, pos2, ...] - массив событий: 
+            amp1 - амплитуда события в каналах 
+            pos1 - абсолютное положение события в наносекундах с начала первого
+            блока
+    
+    """
+    
+    data, block_params, \
+    start_times = generate_multiple_blocks(freq, sample_freq, b_size, min_amp, 
+                                           max_amp, time, block_write_time)
+    
+    time_start = datetime.now().timestamp()*1e+9
+    
+    rsh_params = def_rsh_params
+    rsh_params['aquisition_time'] = time*1000
+    rsh_params['sample_freq'] = sample_freq
+                             
+    rsb = dump_to_rsb(rsh_params, 
+                      time_start + start_times, 
+                      data)
+    block_params[1::2] += time_start
+    
+    return rsb, block_params
+
+
+def generate_df(threshold: int=500, 
+                 area_l: int=50, 
+                 area_r: int=100,
+                 freq: float=12e+3, 
+                 sample_freq: float=3125000.0,
+                 b_size: int=1048576,
+                 min_amp: int=500, 
+                 max_amp: int=7000,
+                 time: float=30.0,
+                 block_write_time: float=0.05):
+    """
+      Генерация файла формата df
+      
+      @freq - частота событий (на секунду)
+      @sample_freq - частота оцифровки Гц
+      @b_size - размер блока в бинах
+      @max_amp - максимальная амплитуда события
+      @min_amp - минимальная амплитуда события
+      @time - время набора в секундах
+      @block_write_time - cкорость записи блока; определяет мертвое время
+      (http://elog.mass.inr.ru/nu-mass/319)
+      @return - [meta, data, [amp1, pos1, amp2, pos2, ...]];
+      Здесь: 
+          meta - метаданные сгенерированного df файла
+          data - бинарные данные сгенерированного df файла
+          [amp1, pos1, amp2, pos2, ...] - массив событий: 
+            amp1 - амплитуда события в каналах 
+            pos1 - абсолютное положение события в наносекундах с начала первого
+            блока
+              
+    """
+    
+    rsb, block_params = generate_rsb(freq, sample_freq, b_size, min_amp, 
+                                     max_amp, time, block_write_time)
+    
+    file = io.BytesIO(rsb)
+    meta, data = rsb_to_df({'simulation': True,
+                            'freq': freq, 
+                            'min_amp': min_amp, 
+                            'max_amp': max_amp,
+                            'block_write_time': block_write_time}, 
+                           file, threshold, 
+                           area_l, area_r)
+    
+    return meta, data, block_params
+    
