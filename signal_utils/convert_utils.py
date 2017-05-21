@@ -61,7 +61,7 @@ def rsb_to_df(ext_meta: dict, rsb_file,
       
     """
     
-    sec_coef = 10e+9
+    sec_coef = 1e+9
     
     rsb_ds = dfparser.RshPackage(rsb_file)
     

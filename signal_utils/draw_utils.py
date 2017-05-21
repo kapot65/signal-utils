@@ -109,6 +109,12 @@ def draw_metrics(metrics: dict):
     """
       Отрисовка метрик
       
+      Выводятся:
+          - гистограмма расстояний между пиками в наложенных событиях
+          - гистограмма ошибок по амплитудам
+          - гистограммы реального и восстановленного спектров
+          - гистограмма реальных амплитуд пропущенных событий (без шумов)
+      
       @metrics -- Метрики. Cм. вывод signal_utils.test_utils._calc_metrics
       
     """
@@ -144,17 +150,17 @@ def draw_metrics(metrics: dict):
     dbl_amps_det, \
     dbl_dists_det = get_dbl_amps_dists(metrics["doubles_detected"])
     
-    fig, ax = plt.subplots(3, 2)
+    fig, ax = plt.subplots(4, 2)
     hist, bins = np.histogram(dbl_dists_real, 40)
     hist_det, bins = np.histogram(dbl_dists_det, bins=bins)
     ax[2][0].set_title("real doubles")
     ax[2][0].hist2d(dbl_dists_real, dbl_amps_real)
     ax[2][1].set_title("detected doubles")
     ax[2][1].hist2d(dbl_dists_det, dbl_amps_det)
-    ax[0][0].set_title("real/detected doubles dists cumsums")
-    ax[0][0].plot(bins[1:], np.cumsum(hist), label='real')
-    ax[0][0].plot(bins[1:], np.cumsum(hist_det), label='detected')
-    ax[0][0].legend()
+    ax[1][1].set_title("real/detected doubles dists cumsums")
+    ax[1][1].plot(bins[1:], np.cumsum(hist), label='real')
+    ax[1][1].plot(bins[1:], np.cumsum(hist_det), label='detected')
+    ax[1][1].legend()
     
     print("%s detected \n"\
           "%s real \n"\
@@ -170,8 +176,8 @@ def draw_metrics(metrics: dict):
     ax[0][1].set_title("amplitude error")
     ax[0][1].hist(error, 40)
     
-    ax[1][1].set_title("negative_amplitudes error")
-    ax[1][1].hist(metrics["amps_real"][np.where(idxs_raw == -1)[0]], 40)
+    ax[0][0].set_title("negative_amplitudes error")
+    ax[0][0].hist(metrics["amps_real"][np.where(idxs_raw == -1)[0]], 40)
     
     
     idxs_raw[idxs_raw==-1]
@@ -181,9 +187,21 @@ def draw_metrics(metrics: dict):
               max(metrics["amps_real"].max(), 
                   metrics["amps_extracted"].max()))
     
-    ax[1][0].set_title("amp hists")
+    ax[1][0].set_title("real vs generated amps hists")
     ax[1][0].hist(metrics["amps_real"], 80, \
                   fc=(1,0,0,0.5), label="real", range=range_)
     ax[1][0].hist(metrics["amps_extracted"], 80, fc=(0,0,1,0.5),
             label="extracted", range=range_)
     ax[1][0].legend()
+    
+    range_ = (min(metrics["pos_real"].min(), 
+                  metrics["pos_extracted"].min()),
+              max(metrics["pos_real"].max(), 
+                  metrics["pos_extracted"].max()))
+    
+    ax[3][0].set_title("real vs generated pos hists")
+    ax[3][0].hist(metrics["pos_real"], 80, \
+                  fc=(1,0,0,0.5), label="real", range=range_)
+    ax[3][0].hist(metrics["pos_extracted"], 80, fc=(0,0,1,0.5),
+            label="extracted", range=range_)
+    ax[3][0].legend()

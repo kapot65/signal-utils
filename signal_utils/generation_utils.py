@@ -13,6 +13,7 @@ from tqdm import tqdm
 from scipy.interpolate import interp1d
 from dfparser import dump_to_rsb
 from dfparser.df_data.def_values import def_rsh_params
+from random_custom_pdf import rand_custom
 
 from convert_utils import rsb_to_df
 
@@ -112,6 +113,7 @@ def gen_multiple(x, *args, l_size=10/3125000.0, r_size=100/3125000.0):
 def gen_raw_block(freq: float=12e+3, 
                   sample_freq: float=3125000.0, 
                   b_size: int=1048576,
+                  dist_file: str=None,
                   min_amp: int=500, 
                   max_amp: int=7000):
     """
@@ -119,6 +121,8 @@ def gen_raw_block(freq: float=12e+3,
       @freq - частота событий (на секунду)
       @sample_freq - частота оцифровки Гц
       @b_size - размер блока в бинах
+      @dist_file - файл с гистограммой распределения (см data/dist.dat).
+      Перекрывает параметры min_amp и max_amp.
       @max_amp - максимальная амплитуда события
       @min_amp - минимальная амплитуда события
       @return - [data, [amp1, pos1, amp2, pos2, ...]]
@@ -128,19 +132,37 @@ def gen_raw_block(freq: float=12e+3,
     events = int(freq*(b_size/sample_freq))
     
     params = np.zeros(events*2, np.float64)
-    
     params[1::2] = np.sort(np.random.uniform(0,  b_size/sample_freq, events))
-    params[0::2] = np.random.uniform(min_amp, max_amp, events)
+    
+    if not dist_file:
+        params[0::2] = np.random.uniform(min_amp, max_amp, events)
+    else:
+        if gen_raw_block.file != dist_file:
+            data = np.fromfile(dist_file, sep='\t')
+            data = data.reshape((len(data)//2, 2))
+            gen_raw_block.file = dist_file
+            gen_raw_block.x = data[:, 0]
+            gen_raw_block.y = data[:, 1]
+            
+        params[0::2] = rand_custom(gen_raw_block.x, gen_raw_block.y, (events,))
+    
+    
+    
     
     x = np.arange(b_size)/sample_freq
     data = gen_multiple(x, *params)
     
     return data + generate_noise(x), params
 
+gen_raw_block.file = None
+gen_raw_block.x = None
+gen_raw_block.y = None
+
 
 def generate_multiple_blocks(freq: float=12e+3, 
                              sample_freq: float=3125000.0,
                              b_size: int=1048576,
+                             dist_file: str=None,
                              min_amp: int=500, 
                              max_amp: int=7000,
                              time: float=30.0,
@@ -151,6 +173,8 @@ def generate_multiple_blocks(freq: float=12e+3,
         @freq - частота событий (на секунду)
         @sample_freq - частота оцифровки Гц
         @b_size - размер блока в бинах
+        @dist_file - файл с гистограммой распределения (см data/dist.dat). 
+        Перекрывает параметры min_amp и max_amp.
         @max_amp - максимальная амплитуда события
         @min_amp - минимальная амплитуда события
         @time - время набора в секундах
@@ -174,11 +198,14 @@ def generate_multiple_blocks(freq: float=12e+3,
 
     data = np.zeros((blocks_num, b_size), np.int16)
     
-    for i in tqdm(range(blocks_num)):
-        out = gen_raw_block(freq, sample_freq, b_size, min_amp, max_amp)
+    for i in tqdm(range(blocks_num), desc="generating blocks"):
+        out = gen_raw_block(freq, sample_freq, b_size, 
+                            dist_file, min_amp, max_amp)
         data[i] = out[0]
         out[1][1::2] += start_times[i]
-        block_params.append(out[1]*1e+9)
+        out[1][1::2] *= 1e+9
+        
+        block_params.append(out[1])
    
     block_params = np.hstack(block_params)
     
@@ -188,6 +215,7 @@ def generate_multiple_blocks(freq: float=12e+3,
 def generate_rsb(freq: float=12e+3, 
                  sample_freq: float=3125000.0,
                  b_size: int=1048576,
+                 dist_file: str=None,
                  min_amp: int=500, 
                  max_amp: int=7000,
                  time: float=30.0,
@@ -198,6 +226,8 @@ def generate_rsb(freq: float=12e+3,
       @freq - частота событий (на секунду)
       @sample_freq - частота оцифровки Гц
       @b_size - размер блока в бинах
+      @dist_file - файл с гистограммой распределения (см data/dist.dat). 
+      Перекрывает параметры min_amp и max_amp.
       @max_amp - максимальная амплитуда события
       @min_amp - минимальная амплитуда события
       @time - время набора в секундах
@@ -213,8 +243,9 @@ def generate_rsb(freq: float=12e+3,
     """
     
     data, block_params, \
-    start_times = generate_multiple_blocks(freq, sample_freq, b_size, min_amp, 
-                                           max_amp, time, block_write_time)
+    start_times = generate_multiple_blocks(freq, sample_freq, b_size, 
+                                           dist_file, min_amp, max_amp, time, 
+                                           block_write_time)
     
     time_start = datetime.now().timestamp()*1e+9
     
@@ -231,21 +262,24 @@ def generate_rsb(freq: float=12e+3,
 
 
 def generate_df(threshold: int=500, 
-                 area_l: int=50, 
-                 area_r: int=100,
-                 freq: float=12e+3, 
-                 sample_freq: float=3125000.0,
-                 b_size: int=1048576,
-                 min_amp: int=500, 
-                 max_amp: int=7000,
-                 time: float=30.0,
-                 block_write_time: float=0.05):
+                area_l: int=50, 
+                area_r: int=100,
+                freq: float=12e+3, 
+                sample_freq: float=3125000.0,
+                b_size: int=1048576,
+                dist_file: str=None,
+                min_amp: int=500, 
+                max_amp: int=7000,
+                time: float=30.0,
+                block_write_time: float=0.05):
     """
       Генерация файла формата df
       
       @freq - частота событий (на секунду)
       @sample_freq - частота оцифровки Гц
       @b_size - размер блока в бинах
+      @dist_file - файл с гистограммой распределения (см data/dist.dat). 
+      Перекрывает параметры min_amp и max_amp.
       @max_amp - максимальная амплитуда события
       @min_amp - минимальная амплитуда события
       @time - время набора в секундах
@@ -262,8 +296,8 @@ def generate_df(threshold: int=500,
               
     """
     
-    rsb, block_params = generate_rsb(freq, sample_freq, b_size, min_amp, 
-                                     max_amp, time, block_write_time)
+    rsb, block_params = generate_rsb(freq, sample_freq, b_size, dist_file,
+                                     min_amp,  max_amp, time, block_write_time)
     
     file = io.BytesIO(rsb)
     meta, data = rsb_to_df({'simulation': True,
