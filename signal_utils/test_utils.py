@@ -121,7 +121,8 @@ def _calc_metrics(amps_real, pos_real,
     return metrics
 
 
-def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000):
+def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
+               extract_frames=False, frame_l=10, frame_r=20):
     """Тестирование с использованием генерируемых df файлов.
     @note - алгоритм протестирован только на стандартной частоте оцифровки
     
@@ -145,6 +146,8 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000):
      @meta
      @data
      @block_params
+     
+     @todo изменить фунции детектирования
     """
 
     threshold = meta['process_params']['threshold']
@@ -155,6 +158,7 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000):
     point.ParseFromString(data)
 
     start = datetime.now()
+    frames = []
     amps= []
     times = []
     singles = []
@@ -164,10 +168,25 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000):
             times_block = []
             singles_block = []
             for event in block.events:
-                data = np.frombuffer(event.data, np.int16)
-                
-                params, singles_raw = algoritm_func(data, event.time, 
+                global ev_data
+                ev_data = np.frombuffer(event.data, np.int16)
+                params, singles_raw = algoritm_func(ev_data, event.time, 
                                                     threshold, sample_freq)
+                
+                if extract_frames:
+                    peaks = np.round((params[1::2] - 
+                                      event.time) * sample_freq / 1e+9)
+                    peaks_mask = np.logical_and(peaks >= frame_l,
+                                                peaks < len(ev_data) - frame_r)
+                    good_peaks = peaks[peaks_mask]
+                    shape = (len(good_peaks), frame_l + frame_r)
+                    frames_block = np.zeros(shape, np.int16)
+                    for j, peak in enumerate(good_peaks):
+                        global peak
+                        frames_block[j] = ev_data[int(peak) - frame_l: 
+                                                  int(peak) + frame_r]
+                    frames.append(frames_block)
+                        
                 amps_block.append(params[0::2])
                 times_block.append(params[1::2])
                 singles_block.append(singles_raw)
@@ -184,6 +203,7 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000):
     amps = np.hstack(amps)
     times = np.hstack(times)
     singles = np.hstack(singles)
+    frames = np.vstack(frames)
     
     end = datetime.now()
     delta = (end - start).total_seconds()
@@ -194,19 +214,22 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000):
     metrics = _calc_metrics(amps_real, times_real,
                             amps, times,
                             singles, max_pos_err)
+    
+    
+    out = {"amps_real": amps_real,
+           "pos_real": times_real,
+           #"frames_real": frames_real,
+           "amps_extracted": amps,
+           "pos_extracted": times,
+           #"frames_extracted": frames_extracted,
+           "singles_extracted": singles,
+           "time_elapsed": delta,
+           **metrics}
+    
+    if extract_frames:
+        out['frames'] = frames
 
-    return {"amps_real": amps_real,
-            "pos_real": times_real,
-            #"frames_real": frames_real,
-            "amps_extracted": amps,
-            "pos_extracted": times,
-            #"frames_extracted": frames_extracted,
-            "singles_extracted": singles,
-            "time_elapsed": delta,
-            **metrics}
-    """
-    return amps, times, singles
-    """
+    return out
 
 
 def test_convertion_speed():
