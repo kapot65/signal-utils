@@ -74,7 +74,6 @@ def extract_simple_amps(data, start_time, threshold, sample_freq):
     
     params = np.zeros(len(peaks)*2, np.float64)
     params[0::2] = data[peaks]
-    #print(peaks/sample_freq*1e+9)
     params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
     singles = np.ones(peaks.shape, np.bool)
     
@@ -116,7 +115,8 @@ def extract_amps_approx(data, start_time, threshold, sample_freq):
     return params, singles
 
 
-def extract_amps_approx2(data, start_time, threshold, sample_freq):
+def extract_amps_approx2(data, start_time, threshold, sample_freq,
+                         classify=False, frame_l=15, frame_r=25):
     """
       Последовательное выделение событий из блока с вычитанием предыдущих 
       событий.
@@ -130,6 +130,20 @@ def extract_amps_approx2(data, start_time, threshold, sample_freq):
     """
     
     peaks = get_peaks(data, threshold)
+    if classify:
+        if not extract_amps_approx2.bst:
+            if not 'load_model' in locals():
+                global xgb
+                xgb = __import__('xgboost')
+            extract_amps_approx2.bst = xgb.Booster()
+            model_path = path.join(path.dirname(__file__), 'data/xgb.dat') 
+            extract_amps_approx2.bst.load_model(model_path)
+
+        frames = extract_frames(data.copy(), peaks, frame_l, frame_r)
+        preds = extract_amps_approx2.bst.predict(xgb.DMatrix(frames))
+        singles = preds > 0.97
+    else:
+        singles = np.ones(peaks.shape, np.bool)
     
     params = np.zeros(len(peaks)*2, np.float32)
     params[0::2] = data[peaks]
@@ -138,9 +152,25 @@ def extract_amps_approx2(data, start_time, threshold, sample_freq):
     for i, peak in enumerate(peaks[:-1]):
         params[(i + 1)*2::2] -= gen_signal(peaks[i + 1:], params[i*2], peak)
     
-    singles = np.ones(peaks.shape, np.bool)
-    
     return params, singles
+extract_amps_approx2.bst = None
+
+
+def extract_frames(ev_data, peaks, frame_l, frame_r):
+    """Выделение событий из кадра по пикам.
+    @ev_data - массив кадра
+    @peaks - массив положений пиков в кадре в бинах
+    @frame_l - размер обрезания события слева от пика
+    @frame_r - размер обрезания события справа от пика
+    @return - Двумерный массив событий.
+    """
+    shape = (len(peaks), frame_l + frame_r)
+    frames_block = np.zeros(shape, np.int16)
+    for j, peak in enumerate(peaks):
+        if peak >= frame_l and peak < len(ev_data) - frame_r:
+            frames_block[j] = ev_data[int(peak) - frame_l: 
+                                      int(peak) + frame_r]
+    return frames_block
 
 
 def calc_center(ev, amp_arg, step=2):

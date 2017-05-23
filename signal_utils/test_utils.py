@@ -1,7 +1,7 @@
 """Модуль для тестирования параметров алгоритмов."""
 
+from os import path
 from datetime import datetime
-from functools import partial
 
 from dfparser import Point
 import numpy as np
@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from draw_utils import draw_metrics
 from generation_utils import generate_df
-
+from extract_utils import extract_frames
 
 def _calc_metrics(amps_real, pos_real,
                   amps_extracted, pos_extracted,
@@ -122,7 +122,7 @@ def _calc_metrics(amps_real, pos_real,
 
 
 def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
-               extract_frames=False, frame_l=10, frame_r=20):
+               extr_frames=False, frame_l=15, frame_r=25):
     """Тестирование с использованием генерируемых df файлов.
     @note - алгоритм протестирован только на стандартной частоте оцифровки
     
@@ -149,11 +149,9 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
      
      @todo изменить фунции детектирования
     """
-
     threshold = meta['process_params']['threshold']
     sample_freq = meta['params']['sample_freq']
 
-    global point
     point = Point()
     point.ParseFromString(data)
 
@@ -168,23 +166,16 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
             times_block = []
             singles_block = []
             for event in block.events:
-                global ev_data
                 ev_data = np.frombuffer(event.data, np.int16)
                 params, singles_raw = algoritm_func(ev_data, event.time, 
                                                     threshold, sample_freq)
                 
-                if extract_frames:
+                if extr_frames:
                     peaks = np.round((params[1::2] - 
                                       event.time) * sample_freq / 1e+9)
-                    peaks_mask = np.logical_and(peaks >= frame_l,
-                                                peaks < len(ev_data) - frame_r)
-                    good_peaks = peaks[peaks_mask]
-                    shape = (len(good_peaks), frame_l + frame_r)
-                    frames_block = np.zeros(shape, np.int16)
-                    for j, peak in enumerate(good_peaks):
-                        global peak
-                        frames_block[j] = ev_data[int(peak) - frame_l: 
-                                                  int(peak) + frame_r]
+                    
+                    frames_block = extract_frames(ev_data, peaks, 
+                                                  frame_l, frame_r)
                     frames.append(frames_block)
                         
                 amps_block.append(params[0::2])
@@ -203,7 +194,8 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
     amps = np.hstack(amps)
     times = np.hstack(times)
     singles = np.hstack(singles)
-    frames = np.vstack(frames)
+    if extr_frames:
+        frames = np.vstack(frames)
     
     end = datetime.now()
     delta = (end - start).total_seconds()
@@ -218,15 +210,13 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
     
     out = {"amps_real": amps_real,
            "pos_real": times_real,
-           #"frames_real": frames_real,
            "amps_extracted": amps,
            "pos_extracted": times,
-           #"frames_extracted": frames_extracted,
            "singles_extracted": singles,
            "time_elapsed": delta,
            **metrics}
     
-    if extract_frames:
+    if extr_frames:
         out['frames'] = frames
 
     return out
@@ -240,10 +230,18 @@ def test_convertion_speed():
 
 
 if __name__ == '__main__':
+    from functools import partial
+    
     from extract_utils import extract_amps_approx2
     from pylab import rcParams
     rcParams['figure.figsize'] = 10, 10
     
-    meta, data, block_params = generate_df(time=30, threshold=700)
-    metrics = test_on_df(meta, data, block_params, extract_amps_approx2)
+    dist_path = path.join(path.dirname(__file__), 'data/dist.dat')
+
+    meta, data, block_params = generate_df(time=4, threshold=700, 
+                                           dist_file=dist_path, freq=40e3)
+    
+    extract_func = partial(extract_amps_approx2, classify=True)
+    metrics = test_on_df(meta, data, block_params, extract_func,
+                         extr_frames=True)
     draw_metrics(metrics)
