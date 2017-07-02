@@ -7,7 +7,8 @@ from scipy.optimize import curve_fit
 from scipy.signal import argrelextrema
 
 from gdrive_utils import load_dataset
-from generation_utils import gen_multiple, gen_signal
+from generation_utils import gen_multiple
+from generation_utils import gen_signal
 
 
 def extract_fit_all(data, start_time, threshold, sample_freq,
@@ -118,11 +119,11 @@ def extract_amps_approx(data, start_time, threshold, sample_freq):
 def extract_amps_approx2(data, start_time, threshold, sample_freq,
                          classify=False, frame_l=15, frame_r=25):
     """
-      Последовательное выделение событий из блока с вычитанием предыдущих 
+      Последовательное выделение событий из блока с вычитанием предыдущих
       событий.
       
-      Ускоренный вариант extract_amps_approx. Вместо вычета события из всего 
-      кадра, событие вычитается только из пиков. 
+      Ускоренный вариант extract_amps_approx. Вместо вычета события из всего
+      кадра, событие вычитается только из пиков.
       
       Примерно на 30% медленее extract_simple_amps.
       
@@ -154,6 +155,76 @@ def extract_amps_approx2(data, start_time, threshold, sample_freq,
     
     return params, singles
 extract_amps_approx2.bst = None
+
+
+def extract_amps_front_fit(data, start_time, threshold, sample_freq,
+                           l_step=2, r_step=5):
+    """Выделение событий с помощью последовательного фитирования фронта.
+
+
+    @l_step - Количество точек слева от порогового бина, по которым будет
+    проведено фитирование.
+    @r_step - Количество точек справа от порогового бина, по которым будет
+    проведено фитирование.
+    """
+    params = []
+    while True:
+        data, popt, pcov = extract_event(data, threshold, l_step=l_step,
+                                         r_step=r_step, freq=1.0/sample_freq)
+        if popt is None:
+            break
+        else:
+            params.append(popt)
+
+    params = np.hstack(params)
+    singles = np.ones(params.shape[0]//2, np.bool)
+
+
+    params[1::2] = params[1::2]*1e+9 + start_time
+    return params, singles
+
+
+def extract_event(data, threshold, l_step, r_step, freq, def_amp=2000):
+    """Выделение первого события в кадре с помощью фитирования по фронту.
+
+    @data - Кадр события.
+    @threshold - Порог.
+    @def_amp - Амплитуда по-умолчанию при фитировании.
+    @l_step - Количество точек слева от порогового бина, по которым будет
+    проведено фитирование.
+    @r_step - Количество точек справа от порогового бина, по которым будет
+    проведено фитирование.
+    @freq - Частота оцифровки.
+    @return data, popt, pcov, где:
+        data - Кадр, из которого вычтено определившееся событие.
+        popt - [amp, pos] подобранные при фитировании амплитуда и положение
+        события
+        pcov - параметры сходимости (см scipy.optimize.curve_fit)
+    """
+    above_thr = np.where(data > threshold)[0]
+    if not above_thr.size:
+        return data, None, None
+
+    bord = above_thr[0]
+
+    l_ind = max(0, bord - l_step)
+    r_ind = min(data.size, bord + r_step)
+
+    part = data[l_ind:r_ind]
+
+    x = np.linspace(0, part.shape[0]*freq, part.shape[0])
+
+    p0 = [def_amp, part.argmax()*freq]
+    bounds = ([500, part.argmax()*freq - 3.2e-06],
+              [5700, part.argmax()*freq + 3.2e-06])
+
+    popt, pcov = curve_fit(gen_signal, x, part,
+                           p0=p0, bounds=bounds)
+
+    x_big = np.linspace(0, data.shape[0]*freq, data.shape[0])
+
+    return data - gen_signal(x_big - l_ind*freq, *popt), \
+           popt + [0, l_ind*freq], pcov
 
 
 def extract_frames(ev_data, peaks, frame_l, frame_r):

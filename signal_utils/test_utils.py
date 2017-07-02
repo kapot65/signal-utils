@@ -11,6 +11,43 @@ from draw_utils import draw_metrics
 from generation_utils import generate_df
 from extract_utils import extract_frames
 
+def _extract_real_frames(meta, data, block_params, frame_l=15, frame_r=25):
+    """Выделение кадров реальных событий из сгенерированного df файла.
+
+    @meta - Метаданные df файла.
+    @data - Бинарные данные df файла.
+    @block_params - Параметры событий.
+    @frame_l - Размер сохраняемого кадра в бинах слева.
+    @frame_r -Размер сохраняемого кадра в бинах справа.
+    @retutn - Массив кадров.
+    """
+
+    bin_time = 1e+9 / meta['params']['sample_freq']
+    times = block_params[1::2]
+
+    point = Point()
+    point.ParseFromString(data)
+
+    frames = np.zeros((times.size, frame_l + frame_r), np.float32)
+    for channel in point.channels:
+        for block in channel.blocks:
+            for event in block.events:
+                event_data = np.frombuffer(event.data, dtype=np.int16)
+                ev_l_time = (block.time + event.time)
+                ev_r_time = ev_l_time + len(event_data)*bin_time
+
+                l_index = np.searchsorted(times, ev_l_time)
+                r_index = np.searchsorted(times, ev_r_time)
+
+                peaks = [int(round((times[idx] - ev_l_time)/bin_time)) for
+                         idx in range(l_index, r_index)]
+
+                frames[l_index:r_index] = extract_frames(event_data, peaks,
+                                                         frame_l, frame_r)
+
+    return np.vstack(frames)
+
+
 def _calc_metrics(amps_real, pos_real,
                   amps_extracted, pos_extracted,
                   singles_extracted, max_pos_err):
@@ -88,6 +125,7 @@ def _calc_metrics(amps_real, pos_real,
     metrics["total_real"] = len(amps_real)
     metrics["total_detected"] = len(amps_extracted)
 
+
     STEP = 1000
     global idxs_raw
     idxs_raw = np.full(pos_real.shape, -1, np.int)
@@ -97,14 +135,27 @@ def _calc_metrics(amps_real, pos_real,
         max_ind = np.searchsorted(pos_extracted, pos_real_bl[-1] + max_pos_err)
         pos_extr_bl = pos_extracted[min_ind:max_ind]
         
-        if len(pos_real_bl):
-            idxs_raw[i: i + STEP] = np.abs(np.subtract.outer\
-            (pos_extr_bl, pos_real_bl)).argmin(0) + min_ind
-           
+        if len(pos_real_bl) and len(pos_extr_bl):
+            dists_ = np.abs(np.subtract.outer(pos_extr_bl, pos_real_bl))
+
+            vals, idxs_rev, counts = np.unique(dists_.argmin(0),
+                                               return_inverse=True,
+                                               return_counts=True)
+            mults = np.where(counts > 1)[0]
+            for idx in mults:
+                cols = np.where(idxs_rev==idx)[0]
+                argsort_idxs = cols[np.argsort(dists_[:, cols].min(axis=0))]
+                for j in range(argsort_idxs.size):
+                    point = dists_[:, argsort_idxs[j]].argmin()
+                    dists_[point, argsort_idxs[j]] += 320*j
+
+            idxs_raw[i: i + STEP] = dists_.argmin(0) + min_ind
+
     idxs_raw = np.hstack(idxs_raw)
 
     dists = np.abs(pos_real - pos_extracted[idxs_raw])
     idxs_raw[dists > max_pos_err] = -1
+
     single_idxs, counts = np.unique(idxs_raw, return_counts=True)
 
     metrics["real_detected_transitions"] = idxs_raw
@@ -121,11 +172,54 @@ def _calc_metrics(amps_real, pos_real,
     return metrics
 
 
-def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
+def extract_frames_big_pos_err(metrics, err):
+    """Извлечение кадров событий с большой ошибкой по времени.
+
+    @metrics - Посчитанные метрики. @note test_on_df должа быть выполнена с
+    флагом extr_frames=True.
+    @err - Минимальная ошибка в нс.
+    @retutn - Массив кадров.
+    """
+    idxs_raw = metrics["real_detected_transitions"]
+    pos_err = metrics["pos_real"][idxs_raw != -1] - \
+              metrics["pos_extracted"][idxs_raw[idxs_raw != -1]]
+    pos_err = metrics["pos_real"][idxs_raw != -1] - \
+              metrics["pos_extracted"][idxs_raw[idxs_raw != -1]]
+    pos_err = np.abs(metrics["pos_real"][idxs_raw != -1] - \
+              metrics["pos_extracted"][idxs_raw[idxs_raw != -1]])
+    bad_frames = metrics["frames"][idxs_raw[idxs_raw != -1]][pos_err > 320]
+
+    return bad_frames
+
+
+def extract_frames_false_pos(metrics):
+    """Извлечение кадров ложно положительных событий.
+
+    @metrics - Посчитанные метрики. @note test_on_df должа быть выполнена с
+    флагом extr_frames=True.
+    @retutn - Массив кадров.
+    """
+    return metrics['frames'][metrics["false_positives"]]
+
+
+def extract_false_neg():
+    """Извлечение кадров ложно отрицательных событий.
+
+    @metrics - Посчитанные метрики. @note test_on_df должа быть выполнена с
+    флагом extr_frames=True.
+    @retutn - Массив кадров.
+    """
+    return metrics['frames_real'][metrics["false_negatives"]]
+
+
+def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=3200,
                extr_frames=False, frame_l=15, frame_r=25):
     """Тестирование с использованием генерируемых df файлов.
     @note - алгоритм протестирован только на стандартной частоте оцифровки
     
+    @meta - метаданные df файла
+    @data - бинарные данные df файла
+    @block_params - параметры событий
     @algoritm_func - функция выделения событий из данных.
     Входные аргументы функции:
         - data - данные блока (np.array)
@@ -143,9 +237,9 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
      В качестве примера функции выделения см 
      signal_utils.extract_utils.extract_amps_approx2.
      @max_pos_err - макисмальная ошибка выделения положения пика (нс)
-     @meta
-     @data
-     @block_params
+     @extr_frames - сохранение кадров событий в метрику
+     @frame_l - размер сохраняемого кадра в бинах слева
+     @frame_r - размер сохраняемого кадра в бинах справа
      
      @todo изменить фунции детектирования
     """
@@ -218,6 +312,8 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=5000,
     
     if extr_frames:
         out['frames'] = frames
+        out['frames_real'] = _extract_real_frames(meta, data, block_params,
+                                                  frame_l, frame_r)
 
     return out
 
@@ -232,16 +328,17 @@ def test_convertion_speed():
 if __name__ == '__main__':
     from functools import partial
     
-    from extract_utils import extract_amps_approx2
+    from extract_utils import extract_amps_front_fit
     from pylab import rcParams
+
     rcParams['figure.figsize'] = 10, 10
     
     dist_path = path.join(path.dirname(__file__), 'data/dist.dat')
 
-    meta, data, block_params = generate_df(time=4, threshold=700, 
+    meta, data, block_params = generate_df(time=0.33, threshold=1000,
                                            dist_file=dist_path, freq=40e3)
     
-    extract_func = partial(extract_amps_approx2, classify=True)
-    metrics = test_on_df(meta, data, block_params, extract_func,
+    extract_func = partial(extract_amps_front_fit, l_step=2, r_step=5)
+    metrics = test_on_df(meta, data, block_params, extract_amps_front_fit,
                          extr_frames=True)
     draw_metrics(metrics)
