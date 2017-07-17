@@ -16,6 +16,8 @@ cur_dir = path.dirname(path.realpath(__file__))
 if not cur_dir in sys.path: sys.path.append(cur_dir)
 del cur_dir
 
+from process_utils import extract_frames
+
 
 def apply_zsupression(data: np.ndarray, threshold: int=500, 
                           area_l: int=50, area_r: int=100) -> tuple:
@@ -96,26 +98,26 @@ def rsb_to_df(ext_meta: dict, rsb_file,
     use_time_corr = False
     if events_num > 0:
         ev = rsb_ds.get_event(0)
-        if not "ns_since_epoch" in ev:
+        if "ns_since_epoch" not in ev:
             use_time_corr = True 
-            times = list(np.linspace(begin_time, end_time - 
-                                     int(bin_time*b_size), 
+            times = list(np.linspace(begin_time, end_time -
+                                     int(bin_time*b_size),
                                      events_num))
             meta["correcting_time"] = "linear"
-   
+
     point = dfparser.Point()
-    channels = [point.channels.add(num=ch) for ch in range(ch_num)] 
+    channels = [point.channels.add(num=ch) for ch in range(ch_num)]
     for i in range(events_num):
         event_data = rsb_ds.get_event(i)
-        
+
         if use_time_corr:
             time = times[i]
         else:
-            time = event_data["ns_since_epoch"] 
-          
+            time = event_data["ns_since_epoch"]
+
         for ch in range(ch_num):
             block = channels[ch].blocks.add(time=int(time))
-            
+
             ch_data = event_data["data"][ch::ch_num]
             for frame in apply_zsupression(ch_data, threshold, area_l, area_r):
                 frame = np.clip(frame, 0, ch_data.shape[0] - 1)
@@ -123,9 +125,53 @@ def rsb_to_df(ext_meta: dict, rsb_file,
                 event.time = int(frame[0]*bin_time)
                 event.data = ch_data[frame[0]:frame[1]].astype(np.int16)\
                              .tobytes()
-    
+
     meta["bin_offset"] = 0
     meta["bin_size"] = point.ByteSize()
     data = point.SerializeToString()
-    
+
     return meta, data
+
+
+def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25):
+    """Convert frames to events in dataforge points."""
+    
+    threshold = meta['process_params']['threshold']
+    sample_freq = meta['params']['sample_freq']
+    
+    point = dfparser.Point()
+    point.ParseFromString(data)
+    
+    for channel in point.channels:
+        for block in channel.blocks:
+            peaks = block.peaks
+            for ev_num in range(len(block.events)):
+                event = block.events.pop()
+                ev_data = np.frombuffer(event.data, np.int16)
+                params, singles_raw = extract_func(ev_data, event.time, 
+                                                    threshold, sample_freq)
+
+                singles = np.where(singles_raw == True)[0]
+                
+                peaks.times.extend(np.round(params[singles*2 + 1])
+                                   .astype(np.uint64))
+                peaks.amplitudes.extend(np.round(params[singles*2])
+                                        .astype(np.uint64))
+                
+                doubles = np.where(singles_raw == False)[0]
+                peaks_bins = np.round((params[doubles*2 + 1] - 
+                                       event.time) * sample_freq / 1e+9)
+                
+                frames_block = extract_frames(ev_data, peaks_bins, 
+                                              frame_l, frame_r)
+                for idx, frame in enumerate(frames_block):
+                    time = int(np.round(params[doubles[idx]*2 + 1]) +
+                               frame_l / sample_freq * 1e+9)
+                    frame_ser = frame.astype(np.int16).tobytes()
+                    block.events.add(time=time, data=frame_ser)
+
+    meta['process_params']['extracted'] = True
+    meta['process_params']['extracted_frame_l'] = frame_l
+    meta['process_params']['extracted_frame_r'] = frame_r
+
+    return meta, point.SerializeToString()
