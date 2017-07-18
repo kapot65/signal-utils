@@ -326,19 +326,21 @@ def test_convertion_speed():
 
 
 if __name__ == '__main__':
+    import seaborn
     from functools import partial
-    
-    from extract_utils import extract_amps_front_fit
+
+    from extract_utils import extract_amps_front_fit, extract_amps_approx3
     from pylab import rcParams
 
     rcParams['figure.figsize'] = 10, 10
-    
+
+
     dist_path = path.join(path.dirname(__file__), 'data/dist.dat')
 
-    meta, data, block_params = generate_df(time=0.33, threshold=1000,
+    meta, data, block_params = generate_df(time=2, threshold=700,
                                            dist_file=dist_path, freq=40e3)
-    
-    extract_func = partial(extract_amps_front_fit, l_step=2, r_step=5)
-    metrics = test_on_df(meta, data, block_params, extract_amps_front_fit,
+
+    extract_func = partial(extract_amps_front_fit, l_step=1, r_step=5)
+    metrics = test_on_df(meta, data, block_params, extract_amps_approx3,
                          extr_frames=True)
     draw_metrics(metrics)
