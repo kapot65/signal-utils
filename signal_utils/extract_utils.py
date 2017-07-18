@@ -98,7 +98,7 @@ def extract_amps_approx(data, start_time, threshold, sample_freq):
               3. Переход к следующему событию.
       
     """
-    data = data.copy()
+    data = data.copy().astype(np.float32)
     peaks = get_peaks(data, threshold)
     
     params = np.zeros(len(peaks)*2, np.float32)
@@ -109,7 +109,7 @@ def extract_amps_approx(data, start_time, threshold, sample_freq):
         peak = peaks[i]
         amp = data[peak]
         params[i*2] = amp     
-        data -= gen_multiple(x, amp, peak) 
+        data -= gen_multiple(x, amp, peak)
     
     singles = np.ones(peaks.shape, np.bool)
     
