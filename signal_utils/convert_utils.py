@@ -108,9 +108,7 @@ def rsb_to_df(ext_meta: dict, rsb_file,
             time = event_data["ns_since_epoch"]
 
         for channel in range(ch_num):
-            block = channels[channel].blocks.add(time=int(time),
-                                                 bin_size=int(bin_time),
-                                                 length=int(bin_time*b_size))
+            block = channels[channel].blocks.add(time=int(time), )
 
             ch_data = event_data["data"][channel::ch_num]
             for frame in apply_zsupression(ch_data, threshold, area_l, area_r):
