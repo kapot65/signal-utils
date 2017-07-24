@@ -11,7 +11,7 @@ REQS = [str(ir.req) for ir in INSTALL_REQS]
 setup(
     name="signal_utils",
     description='',
-    version="0.1.15",
+    version="0.1.16",
     author="Vasiliy Chernov",
     packages=find_packages(),
     platforms='any',

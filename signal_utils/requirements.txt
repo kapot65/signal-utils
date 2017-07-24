@@ -1,6 +1,6 @@
-numpy 
+numpy
 scipy
-dfparser
+https://github.com/kapot65/python-df-parser/archive/master.zip
 mpld3
 tqdm
 PyDrive
