@@ -11,8 +11,6 @@ from zipfile import ZipFile
 
 import dfparser
 import pandas as pd
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
 
 gauth = None
 drive = None
@@ -22,10 +20,12 @@ def __init_grive():
     global drive
     
     if not gauth:
+        from pydrive.auth import GoogleAuth
         gauth = GoogleAuth()
         gauth.LocalWebserverAuth()
     
     if not drive:
+        from pydrive.drive import GoogleDrive
         drive = GoogleDrive(gauth)
     
 

@@ -125,7 +125,8 @@ def rsb_to_df(ext_meta: dict, rsb_file,
     return meta, data
 
 
-def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25):
+def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25,
+                        correct_time=False):
     """Convert frames to events in dataforge points."""
     threshold = meta['process_params']['threshold']
     sample_freq = meta['params']['sample_freq']
@@ -135,31 +136,36 @@ def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25):
 
     for channel in point.channels:
         for block in channel.blocks:
-            peaks = block.peaks
-            for _ in range(len(block.events)):
-                event = block.events.pop()
-                ev_data = np.frombuffer(event.data, np.int16)
-                params, singles_raw = extract_func(ev_data, event.time,
+
+            events = block.events
+            for _ in range(len(block.frames)):
+                frame = block.frames.pop(0)
+
+                if correct_time:
+                    frame.time = (frame.time//np.uint64(10)).astype(np.uint64)
+
+                ev_data = np.frombuffer(frame.data, np.int16)
+                params, singles_raw = extract_func(ev_data, frame.time,
                                                    threshold, sample_freq)
 
                 singles = np.where(singles_raw == True)[0]
 
-                peaks.times.extend(np.round(params[singles*2 + 1])
+                events.times.extend(np.round(params[singles*2 + 1])
                                    .astype(np.uint64))
-                peaks.amplitudes.extend(np.round(params[singles*2])
+                events.amplitudes.extend(np.round(params[singles*2])
                                         .astype(np.uint64))
 
                 doubles = np.where(singles_raw == False)[0]
-                peaks_bins = np.round((params[doubles*2 + 1] -
-                                       event.time) * sample_freq / 1e+9)
+                events_bins = np.round((params[doubles*2 + 1] -
+                                       frame.time) * sample_freq / 1e+9)
 
-                frames_block = extract_frames(ev_data, peaks_bins,
+                frames_block = extract_frames(ev_data, events_bins,
                                               frame_l, frame_r)
                 for idx, frame in enumerate(frames_block):
                     time = int(np.round(params[doubles[idx]*2 + 1]) +
                                frame_l / sample_freq * 1e+9)
                     frame_ser = frame.astype(np.int16).tobytes()
-                    block.events.add(time=time, data=frame_ser)
+                    block.frames.add(time=time, data=frame_ser)
 
     meta['process_params']['extracted'] = True
     meta['process_params']['extracted_frame_l'] = frame_l

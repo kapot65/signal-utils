@@ -1,3 +1,8 @@
+.idea
+.spyproject
+commit
+jupyterhub*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

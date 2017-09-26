@@ -70,7 +70,8 @@ def gen_signal(x, ampl, pos,
 
     gauss = lambda x: np.exp((-1/2)*np.power((np.abs(sigma*x*base_freq)), p))
     gauss_rev = lambda y: ((1/sigma)*np.power(-2*np.log(y), 1/p)/base_freq)
-    spike = lambda x: (1/(1+2*x*base_freq*s)**tail_factor - 1.0)*np.exp(-x*base_freq*s)
+    spike = lambda x: (1/(1+2*x*base_freq*s)**tail_factor - 1.0)* \
+        np.exp(-x*base_freq*s)
 
     spike_offset = gauss_rev(0.1) + pos
     spike_x = x - spike_offset
