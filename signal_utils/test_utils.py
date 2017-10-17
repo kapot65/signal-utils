@@ -1,7 +1,7 @@
 """Модуль для тестирования параметров алгоритмов."""
 
-from os import path
 from datetime import datetime
+from os import path
 
 from dfparser import Point
 import numpy as np
@@ -317,22 +317,26 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=3200,
     return out
 
 
-if __name__ == '__main__':
-    from functools import partial
+def __test():
     import seaborn
 
-    from extract_utils import extract_amps_approx3
-    from extract_utils import extract_amps_front_fit
+    seaborn.set_context("poster")
+
+    from extract_utils import extract_amps_approx
     from pylab import rcParams
 
     rcParams['figure.figsize'] = 10, 10
 
     dist_path = path.join(path.dirname(__file__), 'data/dist.dat')
 
-    meta, data, block_params = generate_df(time=2, threshold=700,
+    meta, data, block_params = generate_df(time=1, threshold=700,
                                            dist_file=dist_path, freq=40e3)
 
-    extract_func = partial(extract_amps_front_fit, l_step=1, r_step=5)
-    metrics = test_on_df(meta, data, block_params, extract_amps_approx3,
+    global metrics
+    metrics = test_on_df(meta, data, block_params, extract_amps_approx,
                          extr_frames=True)
     draw_metrics(metrics)
+
+
+if __name__ == '__main__':
+    __test()

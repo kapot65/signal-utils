@@ -92,12 +92,52 @@ def filter_times(meta, times, time_thresh_ns=6000):
     return count_rate
 
 
-def get_crs(meta, times):
+def get_crs(meta, times, start=320*2, end=320*63, step=320*2):
     """Вычисление скоростей счета для разных отсечений по времени."""
-    time_thrs = np.arange(500, 5000, 1000)
+    time_thrs = np.arange(start, end, step)
     crs = [filter_times(meta, times, time_thresh_ns=time_thr) for
            time_thr in time_thrs]
     return time_thrs, crs
+
+
+def crs_compare_different_timesteps():
+    """Сравнение графиков скоростей счета при разных шагах.
+
+    Тест показывает причину возникновения "пилы" на графиках.
+    """
+    freq = 42e3
+    amp_thresh = 750
+    time_s = 1.0
+    dist_path = path.join(path.dirname(__file__),
+                          '../signal_utils/data/dist.dat')
+
+    from signal_utils.extract_utils import extract_simple_amps
+
+    meta_gen, data_gen = prepare_point(time_s=time_s, freq=freq,
+                                       amp_thresh=amp_thresh,
+                                       extract_func=extract_simple_amps,
+                                       dist_path=dist_path)
+
+    _, times_gen = df_events_to_np(meta_gen, data_gen)
+
+    time_thrs_640, crs_gen_640 = get_crs(meta_gen, times_gen)
+    time_thrs_1000, crs_gen_1000 = get_crs(meta_gen, times_gen, step=1000)
+    time_thrs_500, crs_gen_500 = get_crs(meta_gen, times_gen, step=400)
+
+    fig, axes = plt.subplots()
+
+    fig.canvas.set_window_title('cr_steps_compare')
+
+    axes.set_title("Effective Count Rate / Time threshold")
+    axes.set_xlabel("Time Threshold, ns")
+    axes.set_ylabel("Effective Count Rate, Hz")
+
+    axes.plot(time_thrs_640, crs_gen_640, label="Step = 640 ns")
+    axes.plot(time_thrs_500, crs_gen_500, label="Step = 400 ns")
+    axes.plot(time_thrs_1000, crs_gen_1000, label="Step = 1000 ns")
+
+    axes.legend(loc=4)
+
 
 
 def main():
@@ -106,33 +146,7 @@ def main():
     Сравнение эффективной скорости счета для реальных и сгенерированных данных.
 
     """
-    freq = 42e3
-    amp_thresh = 750
-    time_s = 30
-    dist_path = path.join(path.dirname(__file__),
-                          '../signal_utils/data/dist.dat')
-
-    meta_gen, data_gen = prepare_point(time_s=time_s, freq=freq,
-                                       amp_thresh=amp_thresh,
-                                       extract_func=extract_amps_approx,
-                                       dist_path=dist_path)
-
-    _, times_gen = df_events_to_np(meta_gen, data_gen)
-    time_thrs, crs_gen = get_crs(meta_gen, times_gen)
-
-    filename = '/home/chernov/data/p102(30s)(HV1=14000).df'
-    _, meta_real, data_real = dfparser.parse_from_file(filename)
-    meta_real_, data_real_ = df_frames_to_events(meta_real, data_real,
-                                                 extract_amps_approx,
-                                                 correct_time=True)
-
-    _, times_real = df_events_to_np(meta_real_, data_real_)
-    time_thrs, crs_real = get_crs(meta_real_, times_real)
-
-    _, axes = plt.subplots()
-    axes.plot(time_thrs, crs_gen, 'ro', label="Generated")
-    axes.plot(time_thrs, crs_real, 'bo', label="Real")
-    axes.legend()
+    crs_compare_different_timesteps()
 
 
 if __name__ == "__main__":

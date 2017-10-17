@@ -132,7 +132,7 @@ def gen_raw_block(freq: float=12e+3,
 
     events = int(freq*(b_size/sample_freq))
 
-    params = np.zeros(events*2, np.float64)
+    params = np.zeros(events*2, np.float128)
     params[1::2] = np.sort(np.random.uniform(0,  b_size/sample_freq, events))
 
     if not dist_file:

@@ -1,4 +1,4 @@
-﻿from os import path
+from os import path
 
 import numpy as np
 from scipy.optimize import curve_fit
@@ -40,8 +40,8 @@ def extract_fit_all(data, start_time, threshold, sample_freq,
     if not len(peaks):
         return np.array([]), np.array([])
 
-    prep_peaks = np.vstack([data[peak - extract_fit_all.l_off: \
-                                 peak + extract_fit_all.r_off]\
+    prep_peaks = np.vstack([data[peak - extract_fit_all.l_off:
+                                 peak + extract_fit_all.r_off]
                            for peak in peaks])
     singles = extract_fit_all.model.predict(prep_peaks/extract_fit_all.x_max)\
                            .argmax(axis=1).astype(np.bool)
@@ -69,12 +69,13 @@ def extract_simple_amps(data, start_time, threshold, sample_freq):
       (событие попадает на хвост другого события).
 
     """
-
     peaks = get_peaks(data, threshold)
 
-    params = np.zeros(len(peaks)*2, np.float64)
+    coeff = np.float128(1e+9/sample_freq)
+
+    params = np.zeros(len(peaks)*2, np.float128)
     params[0::2] = data[peaks]
-    params[1::2] = ((peaks/sample_freq)*1e+9) + start_time
+    params[1::2] = (np.float128(peaks)*coeff) + start_time
     singles = np.ones(peaks.shape, np.bool)
 
     return params, singles

@@ -1,4 +1,5 @@
 """Data files conversion utils."""
+# pylint: disable-msg=C0413
 
 from os import path
 import sys
@@ -15,8 +16,8 @@ del CUR_DIR
 from process_utils import extract_frames
 
 
-def apply_zsupression(data: np.ndarray, threshold: int=500,
-                      area_l: int=50, area_r: int=100) -> tuple:
+def apply_zsupression(data: np.ndarray, threshold: int=500, area_l: int=50,
+                      area_r: int=100) -> tuple:
     """Обрезание шумов в файле данных платы Лан10-12PCI.
 
     Функция расчитана на файлы данных с максимальным размером кадра
@@ -40,9 +41,8 @@ def apply_zsupression(data: np.ndarray, threshold: int=500,
     return events
 
 
-def rsb_to_df(ext_meta: dict, rsb_file,
-              threshold: int=500, area_l: int=50,
-              area_r: int=100) -> (dict, bytearray, int):
+def rsb_to_df(ext_meta: dict, rsb_file, threshold: int=500,
+              area_l: int=50, area_r: int=100) -> (dict, bytearray, int):
     """Конвертировние данных формата rsb в формат df.
 
     @meta - метаданные сообщения с точками
@@ -151,13 +151,13 @@ def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25,
                 singles = np.where(singles_raw == True)[0]
 
                 events.times.extend(np.round(params[singles*2 + 1])
-                                   .astype(np.uint64))
+                                    .astype(np.uint64))
                 events.amplitudes.extend(np.round(params[singles*2])
-                                        .astype(np.uint64))
+                                         .astype(np.uint64))
 
                 doubles = np.where(singles_raw == False)[0]
                 events_bins = np.round((params[doubles*2 + 1] -
-                                       frame.time) * sample_freq / 1e+9)
+                                        frame.time) * sample_freq / 1e+9)
 
                 frames_block = extract_frames(ev_data, events_bins,
                                               frame_l, frame_r)
