@@ -1,6 +1,5 @@
 numpy
 scipy
-https://github.com/kapot65/python-df-parser/archive/master.zip
 mpld3
 tqdm
 PyDrive
@@ -10,3 +9,5 @@ tensorflow==1.0.1
 matplotlib
 h5py
 multiprocess
+dfparser>=0.0.15
+random_custom_pdf
