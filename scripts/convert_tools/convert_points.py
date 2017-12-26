@@ -7,6 +7,7 @@ from glob import glob
 from os import makedirs
 from os import path
 import sys
+import struct
 
 from contextlib import closing
 import dfparser
@@ -39,22 +40,26 @@ if __name__ == "__main__":
     ARGS = parse_args()
 
     FILES_ABS_WILDCARD = path.join(ARGS.data_path, ARGS.wildcard)
-    FILES = glob(FILES_ABS_WILDCARD)
+    FILES = glob(FILES_ABS_WILDCARD, recursive=True)
 
     def process_file(data_file):
         """Обработка отдельного файла."""
-        filepath_rel = path.relpath(data_file, ARGS.data_path)
-        filepath_out = path.join(ARGS.out_path, filepath_rel)
-        _, meta_real, data_real = dfparser.parse_from_file(data_file)
-        meta_real_, data_real_ = df_frames_to_events(meta_real, data_real,
-                                                     extract_amps_approx,
-                                                     correct_time=True)
+        try:
+            filepath_rel = path.relpath(data_file, ARGS.data_path)
+            filepath_out = path.join(ARGS.out_path, filepath_rel)
+            _, meta_real, data_real = dfparser.parse_from_file(data_file)
+            meta_real_, data_real_ = df_frames_to_events(meta_real, data_real,
+                                                         extract_amps_approx,
+                                                         correct_time=True)
 
-        if not path.exists(path.dirname(filepath_out)):
-            makedirs(path.dirname(filepath_out))
+            if not path.exists(path.dirname(filepath_out)):
+                makedirs(path.dirname(filepath_out))
 
-        with open(filepath_out, "wb") as out_file:
-            out_file.write(dfparser.create_message(meta_real_, data_real_))
+            with open(filepath_out, "wb") as out_file:
+                out_file.write(dfparser.create_message(meta_real_, data_real_))
+        except struct.error:
+            pass
+
 
     with closing(Pool()) as pool:
         with tqdm(total=len(FILES)) as pbar:

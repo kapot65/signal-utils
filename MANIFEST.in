@@ -1,0 +1,5 @@
+include pylintrc
+recursive-include scripts *.py
+recursive-include signal_utils *.dat
+recursive-include signal_utils *.h5
+recursive-include signal_utils *.txt

@@ -32,7 +32,7 @@ from signal_utils.test_utils import _extract_real_frames
 def prepare_point(time_s=5, freq=40e3, amp_thresh=700,
                   extract_func=extract_amps_approx,
                   dist_path=path.join(path.dirname(__file__),
-                                      '../signal_utils/data/dist.dat')):
+                                      '../../signal_utils/data/dist.dat')):
     """Фильтрация заведомо недеткетируемых событий из точки."""
     meta, data, block_params = generate_df(time=time_s, threshold=amp_thresh,
                                            dist_file=dist_path, freq=freq)
@@ -109,7 +109,7 @@ def crs_compare_different_timesteps():
     amp_thresh = 750
     time_s = 1.0
     dist_path = path.join(path.dirname(__file__),
-                          '../signal_utils/data/dist.dat')
+                          '../../signal_utils/data/dist.dat')
 
     from signal_utils.extract_utils import extract_simple_amps
 
