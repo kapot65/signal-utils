@@ -85,7 +85,7 @@ def __main():
     ax2.set_title(r"Spectrums $\chi^2$ deviation")
     ax2.set_xlabel("Bins, ch")
     ax2.set_ylabel("Frequency")
-    deviations = ((hists.T - hists_mean)**2).sum(axis=1)/BINS
+    deviations = ((hists.T - hists_mean)**2).sum(axis=1) / BINS
     #ax2.hist(((hists.T - hists_mean)**2).sum(axis=1), 23)
     ax2.plot(deviations, np.ones(deviations.shape), "ro")
 

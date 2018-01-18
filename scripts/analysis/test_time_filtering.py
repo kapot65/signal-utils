@@ -9,20 +9,12 @@ Output:
 - Effective count rate for real and generated data for several time thresholds.
 """
 # pylint: disable-msg=R0914,C0413
-
 from os import path
-import sys
 
 import dfparser
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn
-
-MAIN_DIR = path.abspath(path.join(path.dirname(__file__), '..'))
-if MAIN_DIR not in sys.path:
-    sys.path.append(MAIN_DIR)
-del MAIN_DIR
-
 from signal_utils.convert_utils import df_frames_to_events
 from signal_utils.extract_utils import extract_amps_approx
 from signal_utils.generation_utils import generate_df
@@ -68,7 +60,7 @@ def df_events_to_np(_, data):
     return amps, times
 
 
-def filter_times(meta, times, time_thresh_ns=6000):
+def get_time_filtered_crs(meta, times, time_thresh_ns=6000):
     """Фильтрация по времени.
 
     Фильтрация близких друг к другу событий и поиск эффективной скорости
@@ -80,22 +72,22 @@ def filter_times(meta, times, time_thresh_ns=6000):
     filtered = np.hstack([[0, ], np.where(deltas > time_thresh_ns)[0] + 1])
     filtered_out = np.setdiff1d(np.arange(times.size), filtered)
 
-    filtered_time_s = deltas[filtered_out - 1].sum()*np.double(1e-9)
+    filtered_time_s = deltas[filtered_out - 1].sum() * np.double(1e-9)
 
-    block_len_s = meta['params']['b_size']/meta['params']['sample_freq']
+    block_len_s = meta['params']['b_size'] / meta['params']['sample_freq']
     total_time_s = block_len_s * meta['params']['events_num']
 
-    tau = np.double(total_time_s - filtered_time_s)/np.double(filtered.size) - \
-        np.double(time_thresh_ns)*np.double(1e-9)
-    count_rate = np.double(1)/tau
+    tau = np.double(total_time_s - filtered_time_s) / np.double(filtered.size) - \
+        np.double(time_thresh_ns) * np.double(1e-9)
+    count_rate = np.double(1) / tau
 
     return count_rate
 
 
-def get_crs(meta, times, start=320*2, end=320*63, step=320*2):
+def get_crs(meta, times, start=320 * 2, end=320 * 63, step=320 * 2):
     """Вычисление скоростей счета для разных отсечений по времени."""
     time_thrs = np.arange(start, end, step)
-    crs = [filter_times(meta, times, time_thresh_ns=time_thr) for
+    crs = [get_time_filtered_crs(meta, times, time_thresh_ns=time_thr) for
            time_thr in time_thrs]
     return time_thrs, crs
 
@@ -137,7 +129,6 @@ def crs_compare_different_timesteps():
     axes.plot(time_thrs_1000, crs_gen_1000, label="Step = 1000 ns")
 
     axes.legend(loc=4)
-
 
 
 def main():
