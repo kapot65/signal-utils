@@ -10,12 +10,12 @@ from datetime import datetime
 
 import numpy as np
 from dfparser import dump_to_rsb
-from dfparser.df_data.def_values import def_rsh_params
+from dfparser.df_data.def_values import DEF_RSH_PARAMS
+from random_custom_pdf import rand_custom
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 from convert_utils import rsb_to_df
-from random_custom_pdf import rand_custom
 
 
 def generate_noise(x, base_freq=3125000.0):
@@ -130,7 +130,7 @@ def gen_raw_block(freq: float=12e+3,
       @dist_file - файл с гистограммой распределения (см data/dist.dat).
       Перекрывает параметры min_amp и max_amp.
       @dist_time_func - Функция, генерирующая времена событий
-      (event_num: int, max_time: float) -> np.ndarray(np.float128). 
+      (event_num: int, max_time: float) -> np.ndarray(np.float128).
       Если не указано, будет использовано равномерное распределение.
       @max_amp - максимальная амплитуда события
       @min_amp - минимальная амплитуда события
@@ -270,7 +270,7 @@ def generate_rsb(freq: float=12e+3,
 
     time_start = datetime.now().timestamp() * 1e+9
 
-    rsh_params = def_rsh_params
+    rsh_params = DEF_RSH_PARAMS
     rsh_params['aquisition_time'] = time * 1000
     rsh_params['sample_freq'] = sample_freq
 
