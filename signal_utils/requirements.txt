@@ -11,6 +11,7 @@ tensorflow==1.0.1
 matplotlib
 h5py
 multiprocess
-dfparser>=0.0.15
+dfparser>=0.0.19
 random_custom_pdf
 natsort>=5.1.1
+seaborn>=0.8.1
