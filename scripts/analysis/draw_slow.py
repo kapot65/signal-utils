@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument('-e', '--exclude', action='append', default=[],
                         help='Exclude graphs names. '
                         'The flag can be used repeatedly in command.')
-    parser.add_argument('-m', '--mark', action='append', type=mark,
+    parser.add_argument('-m', '--mark', action='append', type=mark, default=[],
                         help='Add mark with label on graph in '
                         'LABEL,TIMESTAMP_ISO format '
                         '(ex: -m mark1,2017-11-19T09:44:11Z). '
@@ -106,6 +106,10 @@ def _main():
                 axes.plot(
                     graphs[graph]['x'], graphs[graph]['y'],
                     color=sns.color_palette()[idx], label=label)
+
+    for text, x_coord in args.mark:
+        axes.annotate(text, xy=(x_coord, 0), xytext=(x_coord, 1e2),
+                      arrowprops=dict(facecolor='black', shrink=0.05))
 
     # Applying parameters
     if args.title:
