@@ -50,7 +50,8 @@ def parse_args():
                         help='Add mark with label on graph in '
                         'LABEL,TIMESTAMP_ISO format '
                         '(ex: -m mark1,2017-11-19T09:44:11Z). '
-                        'The flag can be used repeatedly in command.')
+                        'The flag can be used repeatedly in command. '
+                        'Does not work with logscale.')
     return parser.parse_args()
 
 
@@ -61,7 +62,9 @@ def _main():
     # Creating graph
     _, axes = plt.subplots()
 
-    for idx_f, input_file in enumerate(glob(args.input)):
+    graphs_all = {}
+
+    for input_file in glob(args.input):
         header, _, data = dfparser.parse_from_file(input_file)
         # Read binary data manually due to machine header error
         # Dont need for good data
@@ -97,15 +100,20 @@ def _main():
                         graphs[key]['y'].append(
                             float(row[key]))
 
-        # Plotting graphs
-        for idx, graph in enumerate(graphs.keys()):
-            if graph not in args.exclude:  # Filter excluded data
+        for key in graphs:
+            if key not in graphs_all:
+                graphs_all[key] = []
+            graphs_all[key].append(graphs[key])
+
+    for idx_key, key in enumerate(graphs_all.keys()):
+        if key not in args.exclude:  # Filter excluded data
+            for idx, graph in enumerate(graphs_all[key]):
                 label = None
-                if idx_f == 1:
-                    label = graph
-                axes.plot(
-                    graphs[graph]['x'], graphs[graph]['y'],
-                    color=sns.color_palette()[idx], label=label)
+                if idx == 1:
+                    label = key
+                axes.plot(graph['x'], graph['y'],
+                          color=sns.color_palette()[idx_key], label=label)
+    axes.legend()
 
     for text, x_coord in args.mark:
         axes.annotate(text, xy=(x_coord, 0), xytext=(x_coord, 1e2),
@@ -120,10 +128,10 @@ def _main():
         axes.set_xscale(args.x_scale)
     if args.y_scale:
         axes.set_yscale(args.y_scale)
-    axes.legend()
     plt.show()
 
 
 if __name__ == "__main__":
+    sns.set()
     sns.set_context("poster")
     _main()
