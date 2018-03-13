@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Drawing df point events time intervals spectrum script.
+"""Drawing df point events time intervals spectrum script.
+
 Point should be processed before drawing.
 """
 from argparse import ArgumentParser

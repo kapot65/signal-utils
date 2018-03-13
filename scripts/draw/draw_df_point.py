@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Drawing df point energy spectrum script.
+"""Drawing df point energy spectrum script.
+
 Point should be processed before drawing.
 """
 from argparse import ArgumentParser
@@ -21,6 +21,8 @@ def __parse_args():
                         help='Amplitudes max threshold (default - 4016).')
     parser.add_argument('-b', '--bins', type=int, default=55,
                         help='Histogram bins number (default - 55).')
+    parser.add_argument('-s', '--split-channels', action="store_true",
+                        help='Split graphs by channels.')
     return parser.parse_args()
 
 
@@ -29,35 +31,52 @@ def _main():
     args = __parse_args()
 
     # Read dataforge point
-    _, _, data = dfparser.parse_from_file(args.input)
+    _, meta, data = dfparser.parse_from_file(args.input)
 
     # Parse Binary data
     point = dfparser.Point()
     point.ParseFromString(data)
 
     # Extract amlitudes from each block
-    amps = []
-    for channel in point.channels:
+    amps = {}
+    for idx, channel in enumerate(point.channels):
         for block in channel.blocks:
-            amps.append(np.array(block.events.amplitudes, np.int16))
+            if idx not in amps:
+                amps[idx] = []
+            amps[idx].append(np.array(block.events.amplitudes, np.int16))
 
-    # Combine amplitudes into one array
-    amps = np.hstack(amps)
+    for idx in amps:
+        amps[idx] = np.hstack(amps[idx])
 
-    # Calculate histogram
-    hist, bins = np.histogram(
-        amps, bins=args.bins, range=(
-            args.ampl_threshold, args.ampl_max))
+    if not args.split_channels:
+        plots = {
+            "all-channels": np.hstack(amps.values())
+        }
+    else:
+        plots = amps
 
-    # Calculate bins centers
-    bins_centers = (bins[:-1] + bins[1:]) / 2
-
-    # Drawing graph
     _, axes = plt.subplots()
     axes.set_title(args.input)
     axes.set_xlabel("Channels, ch")
     axes.set_ylabel("Counts")
-    axes.step(bins_centers, hist, where='mid')
+    for idx, plot in enumerate(plots):
+        # Calculate histogram
+        hist, bins = np.histogram(
+            plots[plot], bins=args.bins, range=(
+                args.ampl_threshold, args.ampl_max))
+
+        # Calculate bins centers
+        bins_centers = (bins[:-1] + bins[1:]) / 2
+
+        # Drawing graph
+        label = idx
+        if "channels" in meta:
+            if str(idx) in meta["channels"]:
+                label = meta["channels"][str(idx)]
+
+        axes.step(bins_centers, hist, where='mid', label=label)
+
+    axes.legend()
     plt.show()
 
 
