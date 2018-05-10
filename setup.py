@@ -11,7 +11,7 @@ def parse_requirements(filename):
 setup(
     name="signal_utils",
     description='',
-    version="0.1.21",
+    version="0.1.22",
     author="Vasiliy Chernov",
     packages=find_packages(),
     platforms='any',
