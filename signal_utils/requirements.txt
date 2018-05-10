@@ -12,6 +12,6 @@ matplotlib
 h5py
 multiprocess
 dfparser>=0.0.20
-random_custom_pdf
+random_custom_pdf>=0.0.2
 natsort>=5.1.1
 seaborn>=0.8.1
