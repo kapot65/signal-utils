@@ -34,22 +34,23 @@ def _extract_real_frames(meta, data, block_params, frame_l=15, frame_r=25):
             for event in block.frames:
                 event_data = np.frombuffer(event.data, dtype=np.int16)
                 ev_l_time = (block.time + event.time)
-                ev_r_time = ev_l_time + len(event_data)*bin_time
+                ev_r_time = ev_l_time + len(event_data) * bin_time
 
                 l_index = np.searchsorted(times, ev_l_time)
                 r_index = np.searchsorted(times, ev_r_time)
 
-                peaks = [int(round((times[idx] - ev_l_time)/bin_time)) for
-                         idx in range(l_index, r_index)]
+                peaks = [
+                    int(round((times[idx] - ev_l_time) / bin_time))
+                    for idx in range(l_index, r_index)
+                ]
 
-                frames[l_index:r_index] = extract_frames(event_data, peaks,
-                                                         frame_l, frame_r)
+                frames[l_index:r_index] = extract_frames(
+                    event_data, peaks, frame_l, frame_r)
 
     return np.vstack(frames)
 
 
-def _calc_metrics(amps_real, pos_real,
-                  amps_extracted, pos_extracted,
+def _calc_metrics(amps_real, pos_real, amps_extracted, pos_extracted,
                   singles_extracted, max_pos_err):
     """Вычисление метрик.
 
@@ -128,7 +129,7 @@ def _calc_metrics(amps_real, pos_real,
     global idxs_raw
     idxs_raw = np.full(pos_real.shape, -1, np.int)
     for i in tqdm(range(0, len(pos_real), STEP), desc="indexing"):
-        pos_real_bl = pos_real[i:i+STEP]
+        pos_real_bl = pos_real[i:i + STEP]
         min_ind = np.searchsorted(pos_extracted, pos_real_bl[0] - max_pos_err)
         max_ind = np.searchsorted(pos_extracted, pos_real_bl[-1] + max_pos_err)
         pos_extr_bl = pos_extracted[min_ind:max_ind]
@@ -136,18 +137,17 @@ def _calc_metrics(amps_real, pos_real,
         if len(pos_real_bl) and len(pos_extr_bl):
             dists_ = np.abs(np.subtract.outer(pos_extr_bl, pos_real_bl))
 
-            vals, idxs_rev, counts = np.unique(dists_.argmin(0),
-                                               return_inverse=True,
-                                               return_counts=True)
+            vals, idxs_rev, counts = np.unique(
+                dists_.argmin(0), return_inverse=True, return_counts=True)
             mults = np.where(counts > 1)[0]
             for idx in mults:
                 cols = np.where(idxs_rev == idx)[0]
                 argsort_idxs = cols[np.argsort(dists_[:, cols].min(axis=0))]
                 for j in range(argsort_idxs.size):
                     point = dists_[:, argsort_idxs[j]].argmin()
-                    dists_[point, argsort_idxs[j]] += 320*j
+                    dists_[point, argsort_idxs[j]] += 320 * j
 
-            idxs_raw[i: i + STEP] = dists_.argmin(0) + min_ind
+            idxs_raw[i:i + STEP] = dists_.argmin(0) + min_ind
 
     idxs_raw = np.hstack(idxs_raw)
 
@@ -158,14 +158,14 @@ def _calc_metrics(amps_real, pos_real,
 
     metrics["real_detected_transitions"] = idxs_raw
     metrics["false_negatives"] = np.arange(len(idxs_raw))[idxs_raw == -1]
-    metrics["false_positives"] = np.setdiff1d(np.arange(len(pos_extracted)),
-                                              single_idxs)
+    metrics["false_positives"] = np.setdiff1d(
+        np.arange(len(pos_extracted)), single_idxs)
 
     doubles_real = single_idxs[counts > 1]
     doubles_real = doubles_real[doubles_real != -1]
     metrics["doubles_real"] = doubles_real
-    metrics["doubles_detected"] = np.arange(len(singles_extracted))[
-        np.where(singles_extracted == False)]
+    metrics["doubles_detected"] = np.arange(
+        len(singles_extracted))[np.where(singles_extracted == False)]
 
     return metrics
 
@@ -210,8 +210,14 @@ def extract_false_neg():
     return metrics['frames_real'][metrics["false_negatives"]]
 
 
-def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=3200,
-               extr_frames=False, frame_l=15, frame_r=25):
+def test_on_df(meta,
+               data,
+               block_params,
+               algoritm_func,
+               max_pos_err=3200,
+               extr_frames=False,
+               frame_l=15,
+               frame_r=25):
     """Тестирование с использованием генерируемых df файлов.
 
     @note - алгоритм протестирован только на стандартной частоте оцифровки
@@ -265,11 +271,11 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=3200,
                                                     threshold, sample_freq)
 
                 if extr_frames:
-                    peaks = np.round((params[1::2] -
-                                      event.time) * sample_freq / 1e+9)
+                    peaks = np.round(
+                        (params[1::2] - event.time) * sample_freq / 1e+9)
 
-                    frames_block = extract_frames(ev_data, peaks,
-                                                  frame_l, frame_r)
+                    frames_block = extract_frames(ev_data, peaks, frame_l,
+                                                  frame_r)
                     frames.append(frames_block)
 
                 amps_block.append(params[0::2])
@@ -297,17 +303,18 @@ def test_on_df(meta, data, block_params, algoritm_func, max_pos_err=3200,
     amps_real = block_params[0::2]
     times_real = block_params[1::2]
 
-    metrics = _calc_metrics(amps_real, times_real,
-                            amps, times,
-                            singles, max_pos_err)
+    metrics = _calc_metrics(amps_real, times_real, amps, times, singles,
+                            max_pos_err)
 
-    out = {"amps_real": amps_real,
-           "pos_real": times_real,
-           "amps_extracted": amps,
-           "pos_extracted": times,
-           "singles_extracted": singles,
-           "time_elapsed": delta,
-           **metrics}
+    out = {
+        "amps_real": amps_real,
+        "pos_real": times_real,
+        "amps_extracted": amps,
+        "pos_extracted": times,
+        "singles_extracted": singles,
+        "time_elapsed": delta,
+        **metrics
+    }
 
     if extr_frames:
         out['frames'] = frames
@@ -329,13 +336,14 @@ def __test():
 
     dist_path = path.join(path.dirname(__file__), 'data/dist.dat')
 
-    meta, data, block_params = generate_df(time=1, threshold=700,
-                                           dist_file=dist_path, freq=40e3)
+    meta, data, block_params = generate_df(
+        time=1, threshold=700, dist_file=dist_path, freq=40e3)
 
     global metrics
-    metrics = test_on_df(meta, data, block_params, extract_amps_approx,
-                         extr_frames=True)
+    metrics = test_on_df(
+        meta, data, block_params, extract_amps_approx, extr_frames=True)
     draw_metrics(metrics)
+
 
 
 if __name__ == '__main__':
