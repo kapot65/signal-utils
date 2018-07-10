@@ -1,3 +1,6 @@
+scripts/*/*.npy
+notebooks
+
 Pipfile
 Pipfile.lock
 

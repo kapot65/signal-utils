@@ -1,19 +1,20 @@
 """Data files conversion utils."""
 # pylint: disable-msg=C0413
 
-from os import path
 import sys
+from os import path
 
-from dateutil.parser import parse
 import dfparser
 import numpy as np
+from dateutil.parser import parse
+from scipy.ndimage.morphology import binary_dilation
+
+from signal_utils.process_utils import extract_frames
 
 CUR_DIR = path.dirname(path.realpath(__file__))
 if CUR_DIR not in sys.path:
     sys.path.append(CUR_DIR)
 del CUR_DIR
-
-from process_utils import extract_frames
 
 
 def apply_zsupression(data: np.ndarray, threshold: int=500, area_l: int=50,
@@ -31,14 +32,18 @@ def apply_zsupression(data: np.ndarray, threshold: int=500, area_l: int=50,
     @return список границ события
 
     """
-    peaks = np.where(data > threshold)[0]
-    dists = peaks[1:] - peaks[:-1]
-    gaps = np.append(np.array([0]), np.where(dists > area_r)[0] + 1)
+    area = max(area_l, area_r)
+    kern = np.zeros(2 * area + 1, dtype=np.bool)
+    kern[area - area_l:area + area_r + 1] = True
 
-    events = ((peaks[gaps[gap]] - area_l, peaks[gaps[gap + 1] - 1] + area_r)
-              for gap in range(0, len(gaps) - 1))
+    mask = np.zeros_like(data, dtype=np.bool)
+    mask[data >= threshold] = True
+    mask_dil = binary_dilation(mask, kern)
 
-    return events
+    masked_data = np.ma.masked_array(data)
+    masked_data[mask_dil] = np.ma.masked
+
+    return ((a.start, a.stop) for a in np.ma.clump_masked(masked_data))
 
 
 def rsb_to_df(ext_meta: dict, rsb_file, threshold: int=500,
@@ -69,9 +74,9 @@ def rsb_to_df(ext_meta: dict, rsb_file, threshold: int=500,
         "area_r": area_r
     }
 
-    begin_time = parse(rsb_ds.params["start_time"]).timestamp()*sec_coef
-    end_time = parse(rsb_ds.params["end_time"]).timestamp()*sec_coef
-    bin_time = (rsb_ds.params["sample_freq"]**-1)*sec_coef
+    begin_time = parse(rsb_ds.params["start_time"]).timestamp() * sec_coef
+    end_time = parse(rsb_ds.params["end_time"]).timestamp() * sec_coef
+    bin_time = (rsb_ds.params["sample_freq"]**-1) * sec_coef
     b_size = rsb_ds.params["b_size"]
 
     if rsb_ds.params["events_num"] == -1:
@@ -93,7 +98,7 @@ def rsb_to_df(ext_meta: dict, rsb_file, threshold: int=500,
         if "ns_since_epoch" not in event:
             use_time_corr = True
             times = list(np.linspace(begin_time, end_time -
-                                     int(bin_time*b_size),
+                                     int(bin_time * b_size),
                                      events_num))
             meta["correcting_time"] = "linear"
 
@@ -114,7 +119,7 @@ def rsb_to_df(ext_meta: dict, rsb_file, threshold: int=500,
             for frame in apply_zsupression(ch_data, threshold, area_l, area_r):
                 frame = np.clip(frame, 0, ch_data.shape[0] - 1)
                 event = block.frames.add()
-                event.time = int(frame[0]*bin_time)
+                event.time = int(frame[0] * bin_time)
                 event.data = ch_data[frame[0]:frame[1]].astype(np.int16) \
                     .tobytes()
 
@@ -142,7 +147,8 @@ def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25,
                 frame = block.frames.pop(0)
 
                 if correct_time:
-                    frame.time = (frame.time//np.uint64(10)).astype(np.uint64)
+                    frame.time = (frame.time // np.uint64(10)
+                                  ).astype(np.uint64)
 
                 ev_data = np.frombuffer(frame.data, np.int16)
                 params, singles_raw = extract_func(ev_data, frame.time,
@@ -150,19 +156,19 @@ def df_frames_to_events(meta, data, extract_func, frame_l=15, frame_r=25,
 
                 singles = np.where(singles_raw == True)[0]
 
-                events.times.extend(np.round(params[singles*2 + 1])
+                events.times.extend(np.round(params[singles * 2 + 1])
                                     .astype(np.uint64))
-                events.amplitudes.extend(np.round(params[singles*2])
+                events.amplitudes.extend(np.round(params[singles * 2])
                                          .astype(np.uint64))
 
                 doubles = np.where(singles_raw == False)[0]
-                events_bins = np.round((params[doubles*2 + 1] -
+                events_bins = np.round((params[doubles * 2 + 1] -
                                         frame.time) * sample_freq / 1e+9)
 
                 frames_block = extract_frames(ev_data, events_bins,
                                               frame_l, frame_r)
                 for idx, frame in enumerate(frames_block):
-                    time = int(np.round(params[doubles[idx]*2 + 1]) +
+                    time = int(np.round(params[doubles[idx] * 2 + 1]) +
                                frame_l / sample_freq * 1e+9)
                     frame_ser = frame.astype(np.int16).tobytes()
                     block.frames.add(time=time, data=frame_ser)

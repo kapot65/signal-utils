@@ -1,4 +1,4 @@
-"""Extracting frames testing algoritm"""
+"""Extracting frames testing algoritm."""
 from argparse import ArgumentParser
 from multiprocessing import Pool
 from os.path import abspath, dirname, join
@@ -8,11 +8,13 @@ import mpld3
 import numpy as np
 import seaborn
 from jinja2 import BaseLoader, Environment
-from markdown2 import markdown
 from mpld3._server import serve
 from pylab import rcParams
+
+from markdown2 import markdown
 from signal_utils import extract_utils, test_utils
 from signal_utils.generation_utils import generate_df
+
 
 OUT_TEMPLATE = """
 # {{ method.upper() }} testing report
@@ -111,6 +113,9 @@ def _gen_hists_plot(
         amps_extr[mult_det],
         bins=bins, range=range_)
 
+    ax.set_title("Extracted events histograms")
+    ax.set_xlabel("Amplitude, ch")
+
     ax.step((bins_pos[:-1] + bins_pos[1:]) / 2, hist_pos,
             where='mid', label='false positives')
 
@@ -140,6 +145,8 @@ def _gen_amps_errs_plot(
         amps_orig[singles_or] - amps_extr[singles_det],
         bins=bins, range=range_)
 
+    ax.set_title("Amplitude errors")
+    ax.set_xlabel("Error, ch")
     ax.step((bins_errs_amp[:-1] + bins_errs_amp[1:]) / 2,
             hist_errs_amp, where='mid')
     ax.grid(color='lightgray', alpha=0.7)
@@ -152,7 +159,12 @@ def _gen_times_errs_plot(
 
     hist_errs_amp, bins_errs_amp = np.histogram(
         pos_orig[singles_or] - pos_extr[singles_det],
-        bins=bins, range=range_)
+        bins=bins,
+        range=range_
+    )
+
+    ax.set_title("Time errors")
+    ax.set_xlabel("Error, bins")
 
     ax.step((bins_errs_amp[:-1] + bins_errs_amp[1:]) / 2,
             hist_errs_amp, where='mid')
@@ -258,7 +270,7 @@ if __name__ == '__main__':
         metrics_all = np.load(ARGS.input)[()]
 
     if ARGS.draw_graphs:
-        seaborn.set_context("poster")
+        # seaborn.set_context("poster")
         rcParams['figure.figsize'] = 8, 6
         hist_range = (0, 8000)
         hist_bins = 200
@@ -314,4 +326,10 @@ if __name__ == '__main__':
             amp_errs_plot=mpld3.fig_to_html(fig_amps_errs),
             times_errs_plot=mpld3.fig_to_html(fig_times_errs)
         )
+
+        fig_hist.show()
+        fig_amps_errs.show()
+        fig_times_errs.show()
+        plt.show()
+
         serve(html)
