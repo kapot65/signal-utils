@@ -39,9 +39,8 @@ from functools import partial
 from os import path
 
 import dfparser
-import numpy as np
-
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
 from multiprocess import Pool
 from natsort import natsorted
@@ -59,6 +58,11 @@ def __parse_args():
                         help='Amplitudes threshold (default - 496).')
     parser.add_argument('-m', '--ampl-max', type=int, default=4016,
                         help='Amplitudes max threshold (default - 4016).')
+    parser.add_argument('-n', '--iter-num', type=int, default=2,
+                        help='Filter iterations number (default - 2).')
+    parser.add_argument('-p', '--iter-perc', type=int, default=0.1,
+                        help='Filter percentage per iteration '
+                        '(default - 0.1).')
     parser.add_argument('-b', '--bins', type=int, default=55,
                         help='Histogram bins number (default - 55).')
     return parser.parse_args()
@@ -104,13 +108,42 @@ def calc_hist_avg(sets_data, point_index):
     for set_ in sets:
         for point in set_:
             curr_index = int(
-                set_[point]["meta"]["external_meta"]["point_index"]
-            )
+                set_[point]["meta"]["external_meta"]["point_index"])
             if curr_index == point_index:
                 hist_avg += set_[point]["hist"]
                 used += 1
     hist_avg /= used
     return hist_avg
+
+
+def draw_point_diffs(sets_data, point_index):
+    """Plot point differences with average value."""
+    hist_avg = calc_hist_avg(sets_data, point_index)
+
+    _, axes = plt.subplots()
+    axes.set_title(r'hist average diff for point %s' % (point_index))
+    axes.set_xlabel(r'Channel, ch')
+    axes.set_ylabel(r'Probability difference')
+    # axes.set_yscale('log')
+    palette = sns.color_palette("hls", len(sets_data))
+    print(sets_data)
+    global s
+    s = sets_data
+
+    for idx, set_ in enumerate(sets_data):
+        for point in sets_data[set_]:
+            curr_index = int(
+                sets_data[set_][point]["meta"]["external_meta"]["point_index"])
+            if curr_index == point_index:
+                hist = sets_data[set_][point]["hist"]
+                bins = sets_data[set_][point]['bins']
+                x = (bins[1:] + bins[:-1]) / 2
+                # hist_avg
+                axes.step(x, hist, where='mid', c=palette[idx], label=set_)
+
+    axes.legend()
+    plt.show()
+    raise Exception
 
 
 def calc_chi_square(set_, hist_avg, point_index):
@@ -186,7 +219,7 @@ def __calc_point_sigma(sets_data, point_index):
 
 def __main():
     group_abs = path.join(ARGS.data_root, ARGS.fill)
-    sets = natsorted(glob.glob(path.join(group_abs, "set_*[0-9]")))[5:]
+    sets = natsorted(glob.glob(path.join(group_abs, "set_*[0-9]")))
     get_spectrum = partial(get_set_spectrum, borders=(
         ARGS.ampl_threshold, ARGS.ampl_max), bins=ARGS.bins)
 
@@ -199,6 +232,8 @@ def __main():
     for idx in range(ARGS.ind_start, ARGS.ind_end):
         hists_avg.append(calc_hist_avg(sets_data, idx))
 
+    draw_point_diffs(sets_data, 70)
+
     sets_points_chi2 = {}
     for set_idx in sets_data:
         x_values = []
@@ -208,12 +243,11 @@ def __main():
             if chi2:
                 x_values.append(idx)
                 y_values.append(chi2)
-        sets_points_chi2[set_idx] = {"x": x_values, "y": y_values}
+        sets_points_chi2[set_idx] = {"x": x_values, "y": y_values, }
 
     _, axes = plt.subplots()
 
-    axes.set_title(r'$\chi^2$ deviations for each point in %s' % (ARGS.fill) +
-                   '\nBad sets excluded')
+    axes.set_title(r'$\chi^2$ deviations for each point in %s' % (ARGS.fill))
     axes.set_xlabel(r'Point index and HV, V')
     axes.set_ylabel(r'$\chi^2$')
     axes.set_yscale('log')
@@ -225,8 +259,7 @@ def __main():
     for idx, set_idx in enumerate(natsorted(sets_points_chi2.keys())):
         axes.scatter(
             sets_points_chi2[set_idx]["x"], sets_points_chi2[set_idx]["y"],
-            label=set_idx, s=30, c=palette[idx], edgecolors="face"
-        )
+            label=set_idx, s=30, c=palette[idx], edgecolors="face")
     axes.legend()
     plt.show()
 

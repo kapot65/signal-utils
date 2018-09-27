@@ -11,15 +11,15 @@ from argparse import ArgumentParser
 from glob import glob
 from os.path import abspath, dirname, join
 
-import dfparser
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn
 from scipy.optimize import curve_fit
-from tqdm import tqdm
 
+import dfparser
 from signal_utils.generation_utils import (gen_raw_block, gen_signal,
                                            generate_df)
+from tqdm import tqdm
 
 FREQ = 3125000.0
 APPR_POINTS = 4

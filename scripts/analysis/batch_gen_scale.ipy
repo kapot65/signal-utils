@@ -1,0 +1,33 @@
+from tqdm import tqdm
+from os.path import exists, join
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+LAN10_ROOT = '/media/chernov/data/data/lan10_processed/'
+MADC_ROOT = '/media/chernov/data/data/MADC/'
+FILL = '2017_05/Fill_2/'
+
+coeffs = {}
+
+for i in tqdm(range(1, 28)):
+  set_p = join(FILL, 'set_{}'.format(i))
+  if exists(join(LAN10_ROOT, set_p)) and exists(join(MADC_ROOT, set_p)):
+    %run calc_lan10_madc_scale.py {LAN10_ROOT} {MADC_ROOT} {set_p}/p*
+    coeffs[i] = [a, b]
+
+
+sns.set_context("poster")
+
+_, ax = plt.subplots()
+ax.set_title("Fitting a linear coefficient for {}".format(FILL))
+ax.set_xlabel("Set number")
+ax.set_ylabel("Linear coefficient")
+ax.scatter([k for k in coeffs], [coeffs[k][0] for k in coeffs])
+
+_, ax = plt.subplots()
+ax.set_title("Free member fitting for {}".format(FILL))
+ax.set_xlabel("Set number")
+ax.set_ylabel("Free member")
+ax.scatter([k for k in coeffs], [coeffs[k][1] for k in coeffs])
+
+plt.show()

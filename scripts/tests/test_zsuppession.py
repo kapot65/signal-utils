@@ -21,7 +21,7 @@ if __name__ == "__main__":
         threshold, area_l, area_r
     ))
     ax.set_xlabel("Position, bins")
-    ax.set_ylabel("Amplitude, labels")
+    ax.set_ylabel("Amplitude, channels")
     ax.axhline(threshold, label="Threshold", ls='--',
                color=seaborn.xkcd_rgb["pale red"])
     ax.grid(color='lightgray', alpha=0.7)
