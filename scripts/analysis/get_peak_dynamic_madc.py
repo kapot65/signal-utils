@@ -1,10 +1,8 @@
-"""Show points peak change in time.
-
-Lan10-12PCI points data should be processed.
-"""
+"""Show points peak change in time."""
 from argparse import ArgumentParser
 from glob import glob
 from os import path
+from struct import unpack
 
 import dfparser
 import matplotlib.pyplot as plt
@@ -32,17 +30,10 @@ def __parse_args():
     return parser.parse_args()
 
 
-def _lan_amps(data):
-    point = dfparser.Point()
-    point.ParseFromString(data)
-
-    amps = []
-
-    for idx, channel in enumerate(point.channels):
-        for block in channel.blocks:
-            amps.append(np.array(block.events.amplitudes, np.int16))
-
-    return np.hstack(amps)
+def _madc_amps(data):
+    amps = np.array(
+        [unpack('H', bytes(a))[0] for a in (zip(data[0::7], data[1::7]))])
+    return amps
 
 
 def _gauss(x, A, mu, sigma):
@@ -64,11 +55,6 @@ def _amp_hist_max(amps):
             (args.left_border + args.left_border) // 4
         ])
 
-    # print(popt)
-    # plt.step(bins_centers, hist, where='mid')
-    # plt.plot(bins_centers, _gauss(bins_centers, *popt))
-    # plt.show()
-    # raise Exception
     return popt[1]
 
 
@@ -107,7 +93,7 @@ if __name__ == "__main__":
 
     sns.set_context("poster")
 
-    points = glob(path.join(args.root, args.fill, '*/*.df'), recursive=True)
+    points = glob(path.join(args.root, args.fill, '*/p*)'), recursive=True)
 
     filtered = []
     for point in points:
@@ -118,23 +104,26 @@ if __name__ == "__main__":
     peaks = []
 
     for point in tqdm(filtered):
-        _, meta, data = dfparser.parse_from_file(point, nodata=False)
-        amps = _lan_amps(data)
+        try:
+            _, meta, data = dfparser.parse_from_file(point, nodata=False)
+            amps = _madc_amps(data)
 
-        num = path.basename(path.dirname(point))[4:]
-        if num.endswith('_bad'):
-            num = num[:-4]
+            num = path.basename(path.dirname(point))[4:]
+            if num.endswith('_bad'):
+                num = num[:-4]
 
-        peak = {
-            'point_index': meta['external_meta']['point_index'],
-            'time': tparse(meta['params']['start_time']),
-            'peak': _amp_hist_max(amps),
-            'mean': _amp_mean(amps),
-            'std': _amp_std(amps),
-            'cr': _amp_cr(amps),
-            'color': int(num) % 2
-        }
-        peaks.append(peak)
+            peak = {
+                'point_index': meta['external_meta']['point_index'],
+                'time': tparse(meta['start_time'][0]),
+                'peak': _amp_hist_max(amps),
+                'mean': _amp_mean(amps),
+                'std': _amp_std(amps),
+                'cr': _amp_cr(amps),
+                'color': int(num) % 2
+            }
+            peaks.append(peak)
+        except RuntimeError as err:
+            print(err)
 
     peaks = sorted(peaks, key=lambda v: v['time'])
 

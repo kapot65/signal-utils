@@ -8,7 +8,6 @@ import dfparser
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
 
 

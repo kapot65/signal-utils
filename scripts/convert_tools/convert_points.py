@@ -10,6 +10,7 @@ from glob import glob
 from os import makedirs, path
 
 import dfparser
+from google.protobuf.message import DecodeError
 from multiprocess import Pool
 from signal_utils.convert_utils import df_frames_to_events
 from signal_utils.extract_utils import extract_amps_approx
@@ -56,6 +57,8 @@ if __name__ == "__main__":
             with open(filepath_out, "wb") as out_file:
                 out_file.write(dfparser.create_message(meta_real_, data_real_))
         except struct.error:
+            pass
+        except DecodeError:
             pass
         except NotImplementedError:
             pass
