@@ -36,6 +36,7 @@ import glob
 from argparse import ArgumentParser
 from contextlib import closing
 from functools import partial
+from itertools import chain
 from os import path
 
 import dfparser
@@ -44,60 +45,39 @@ import numpy as np
 import seaborn as sns
 from multiprocess import Pool
 from natsort import natsorted
+from tqdm import tqdm
 
 
 def __parse_args():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument('data_root', help='Data root folder.')
     parser.add_argument('fill', help='Fill folder relative to data root.')
-    parser.add_argument('--ind-start', type=int, default=0,
-                        help='Points starting index (default - 0).')
-    parser.add_argument('--ind-end', type=int, default=102,
-                        help='Points ending index (default - 102).')
-    parser.add_argument('-t', '--ampl-threshold', type=int, default=496,
-                        help='Amplitudes threshold (default - 496).')
-    parser.add_argument('-m', '--ampl-max', type=int, default=4016,
-                        help='Amplitudes max threshold (default - 4016).')
-    parser.add_argument('-n', '--iter-num', type=int, default=2,
-                        help='Filter iterations number (default - 2).')
-    parser.add_argument('-p', '--iter-perc', type=int, default=0.1,
-                        help='Filter percentage per iteration '
-                        '(default - 0.1).')
-    parser.add_argument('-b', '--bins', type=int, default=55,
-                        help='Histogram bins number (default - 55).')
+    parser.add_argument('-l', '--hist-lower', type=int, default=2592,
+                        help='Histogram lower border value (default - 2592).')
+    parser.add_argument('-u', '--hist-upper', type=int, default=3072,
+                        help='Histogram upper border value(default - 3072).')
+    parser.add_argument('-b', '--hist-bins', type=int, default=30,
+                        help='Histogram bins number (default - 30).')
     return parser.parse_args()
 
 
-def get_set_spectrum(set_abs_path, borders=None, bins=30):
-    """Calculate energy spectrum for set."""
-    points = natsorted(glob.glob(path.join(set_abs_path, "p*.df")))
+def split_by_groups(points):
+    """Split all points by voltage groups."""
+    v_groups = {}
 
-    out = {}
+    for p in tqdm(points, desc='grouping by voltage'):
+        _, meta, _ = dfparser.parse_from_file(p, nodata=True)
+        voltage = int(meta['external_meta']['HV1_value'])
+        if voltage not in v_groups:
+            v_groups[voltage] = []
+        v_groups[voltage].append(p)
+    return v_groups
 
-    for point in points:
-        _, meta, data = dfparser.parse_from_file(point)
-        parsed_data = dfparser.Point()
-        parsed_data.ParseFromString(data)
-        del data
 
-        amps = []
-        times = []
-        for channel in parsed_data.channels:
-            for block in channel.blocks:
-                amps.append(np.array(block.events.amplitudes, np.int16))
-                times.append(np.array(block.events.times, np.uint64))
-
-        amps = np.hstack(amps)
-        times = np.hstack(times)
-        hist, bins = np.histogram(amps, bins, range=borders, density=True)
-        hist_unnorm, _ = np.histogram(amps, bins, range=borders)
-        out[path.relpath(point, set_abs_path)] = {
-            "meta": meta,
-            "hist": hist,
-            "hist_unnorm": hist_unnorm,
-            "bins": bins
-        }
-    return out
+def calc_centered_hist(point):
+    amps = _lan_amps_f(point)
+    hist, bins = np.histogram(
+        amps, range=(ARGS.hist_lower, ARGS.hist_upper), bins=ARGS.hist_bins)
 
 
 def calc_hist_avg(sets_data, point_index):
@@ -114,29 +94,6 @@ def calc_hist_avg(sets_data, point_index):
                 used += 1
     hist_avg /= used
     return hist_avg
-
-
-def draw_point_diffs(sets_data, point_index):
-    """Plot point differences with average value."""
-    hist_avg = calc_hist_avg(sets_data, point_index)
-
-    _, axes = plt.subplots()
-    axes.set_title(r'hist average diff for point %s' % (point_index))
-    axes.set_xlabel(r'Channel, ch')
-    axes.set_ylabel(r'Probability difference')
-    # axes.set_yscale('log')
-    palette = sns.color_palette("hls", len(sets_data))
-
-    for idx, set_ in enumerate(sets_data):
-        for point in sets_data[set_]:
-            curr_index = int(
-                sets_data[set_][point]["meta"]["external_meta"]["point_index"])
-            if curr_index == point_index:
-                hist = sets_data[set_][point]["hist"]
-                bins = sets_data[set_][point]['bins']
-                x = (bins[1:] + bins[:-1]) / 2
-                # hist_avg
-                axes.step(x, hist, where='mid', c=palette[idx], label=set_)
 
 
 def calc_chi_square(set_, hist_avg, point_index):
@@ -193,28 +150,25 @@ def __calc_xticklabels(sets_data):
     return labels
 
 
-def __calc_point_sigma(sets_data, point_index):
-    """Caluclate sigma based on fitting.
+if __name__ == "__main__":
 
-    NOTE: unfinished
-    """
-    sets = list(sets_data.values())
-    hists = []
-    for set_ in sets:
-        for point in set_:
-            curr_index = int(
-                set_[point]["meta"]["external_meta"]["point_index"]
-            )
-            if curr_index == point_index:
-                hists.append(np.arrayset_[point]["hist"])
-    hists = np.vstack(hists)
+    ARGS = __parse_args()
+    sns.set_context("poster")
+    sns.set_style(rc={"font.family": "monospace"})
+    DEF_PALLETE = sns.color_palette()
+    sns.set_palette(sns.cubehelix_palette(8))
 
-
-def __main():
     group_abs = path.join(ARGS.data_root, ARGS.fill)
     sets = natsorted(glob.glob(path.join(group_abs, "set_*[0-9]")))
-    get_spectrum = partial(get_set_spectrum, borders=(
-        ARGS.ampl_threshold, ARGS.ampl_max), bins=ARGS.bins)
+    points = list(
+        chain(
+            *(natsorted(glob.glob(path.join(s, "p*(*s)*.df"))) for s in sets)))
+
+    v_groups = split_by_groups(points)
+
+    for voltage in v_groups:
+        print(voltage, type(voltage))
+        raise Exception
 
     with closing(Pool()) as pool:
         out = pool.map(get_spectrum, sets)
@@ -255,12 +209,3 @@ def __main():
             label=set_idx, s=30, c=palette[idx], edgecolors="face")
     axes.legend()
     plt.show()
-
-
-if __name__ == "__main__":
-    ARGS = __parse_args()
-    sns.set_context("poster")
-    sns.set_style(rc={"font.family": "monospace"})
-    DEF_PALLETE = sns.color_palette()
-    sns.set_palette(sns.cubehelix_palette(8))
-    __main()

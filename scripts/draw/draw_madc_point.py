@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt  # plotting library
 import numpy as np
 import seaborn as sns  # matplotlib grahs visual enchancer
 
+from utils import _madc_amps
+
 
 def __parse_args():
     parser = ArgumentParser(description=__doc__)
@@ -23,12 +25,6 @@ def __parse_args():
     parser.add_argument('-b', '--bins', type=int, default=100,
                         help='Histogram bins number (default - 100).')
     return parser.parse_args()
-
-
-def _madc_amps(fp):
-    _, meta, data = dfparser.parse_from_file(fp)
-    amps = [unpack('H', bytes(a))[0] for a in (zip(data[0::7], data[1::7]))]
-    return amps
 
 
 def _main():

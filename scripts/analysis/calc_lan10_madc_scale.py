@@ -10,6 +10,8 @@ import numpy as np
 import seaborn as sns
 from scipy.optimize import curve_fit
 
+from utils import _lan_amps_f, _madc_amps_f
+
 
 def __parse_args():
     parser = ArgumentParser(description=__doc__)
@@ -44,26 +46,6 @@ def __parse_args():
     return parser.parse_args()
 
 
-def _madc_amps(fp):
-    _, meta, data = dfparser.parse_from_file(fp)
-    amps = np.array([
-        unpack('H', bytes(a))[0] for a in (zip(data[0::7], data[1::7]))])
-    return amps
-
-
-def _lan_amps(fp):
-    _, meta, data = dfparser.parse_from_file(fp)
-    point = dfparser.Point()
-    point.ParseFromString(data)
-
-    amps = []
-
-    for idx, channel in enumerate(point.channels):
-        for block in channel.blocks:
-            amps.append(np.array(block.events.amplitudes, np.int16))
-    return np.hstack(amps)
-
-
 def _gauss(x, A, mu, sigma):
     return A * np.exp(-(x - mu)**2 / (2. * sigma**2))
 
@@ -78,7 +60,7 @@ if __name__ == "__main__":
     # Extract data from  files
     madc_gen = []
     for point in madc_points:
-        amps = _madc_amps(point)
+        amps = _madc_amps_f(point)
         amps = amps[np.logical_and(
             amps > args.madc_left_border,
             amps < args.madc_right_border)]
@@ -87,7 +69,7 @@ if __name__ == "__main__":
 
     lan_gen = []
     for point in lan_points:
-        amps = _lan_amps(point)
+        amps = _lan_amps_f(point)
         amps = amps[np.logical_and(
             amps > args.lan_left_border,
             amps < args.lan_right_border)]

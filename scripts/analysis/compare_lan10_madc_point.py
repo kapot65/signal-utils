@@ -11,6 +11,8 @@ import seaborn as sns
 from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
 
+from utils import _lan_amps_f, _madc_amps_f
+
 
 def __parse_args():
     parser = ArgumentParser(description=__doc__)
@@ -31,33 +33,13 @@ def __parse_args():
     return parser.parse_args()
 
 
-def _madc_amps(fp):
-    _, meta, data = dfparser.parse_from_file(fp)
-    amps = [unpack('H', bytes(a))[0] for a in (zip(data[0::7], data[1::7]))]
-    return amps
-
-
-def _lan_amps(fp):
-    _, meta, data = dfparser.parse_from_file(fp)
-    point = dfparser.Point()
-    point.ParseFromString(data)
-
-    amps = []
-
-    for idx, channel in enumerate(point.channels):
-        for block in channel.blocks:
-            amps.append(np.array(block.events.amplitudes, np.int16))
-
-    return np.hstack(amps)
-
-
 def _main():
     args = __parse_args()
 
     sns.set_context("poster")
 
-    madc_amps = np.array(_madc_amps(path.join(args.madc_root, args.point)))
-    lan_amps = _lan_amps(path.join(args.lan10_root, args.point + '.df'))
+    madc_amps = np.array(_madc_amps_f(path.join(args.madc_root, args.point)))
+    lan_amps = _lan_amps_f(path.join(args.lan10_root, args.point + '.df'))
 
     hist_m, bins = np.histogram(
         madc_amps, bins=args.bins,

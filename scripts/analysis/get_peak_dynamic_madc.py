@@ -12,6 +12,8 @@ from dateutil.parser import parse as tparse
 from scipy.optimize import curve_fit
 from tqdm import tqdm
 
+from utils import _madc_amps
+
 
 def __parse_args():
     parser = ArgumentParser(description=__doc__)
@@ -28,12 +30,6 @@ def __parse_args():
                         help='Histogram bins number (default - 37).')
 
     return parser.parse_args()
-
-
-def _madc_amps(data):
-    amps = np.array(
-        [unpack('H', bytes(a))[0] for a in (zip(data[0::7], data[1::7]))])
-    return amps
 
 
 def _gauss(x, A, mu, sigma):

@@ -14,6 +14,8 @@ from dateutil.parser import parse as tparse
 from scipy.optimize import curve_fit
 from tqdm import tqdm
 
+from utils import _lan_amps
+
 
 def __parse_args():
     parser = ArgumentParser(description=__doc__)
@@ -30,19 +32,6 @@ def __parse_args():
                         help='Histogram bins number (default - 37).')
 
     return parser.parse_args()
-
-
-def _lan_amps(data):
-    point = dfparser.Point()
-    point.ParseFromString(data)
-
-    amps = []
-
-    for idx, channel in enumerate(point.channels):
-        for block in channel.blocks:
-            amps.append(np.array(block.events.amplitudes, np.int16))
-
-    return np.hstack(amps)
 
 
 def _gauss(x, A, mu, sigma):
