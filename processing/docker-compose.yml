@@ -1,0 +1,27 @@
+version: '2'
+
+services:
+
+  rabbitmq:
+    restart: unless-stopped
+    image: rabbitmq:3-management
+    networks:
+      - troitsk_qc
+    hostname: ${RABBITMQ_HOSTNAME}
+    environment:
+     RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+     RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+
+  redis:
+      image: redis
+      networks:
+        - troitsk_qc
+      volumes:
+        - ${DATA_PATH}/redis:/data
+      hostname: ${REDIS_HOSTNAME}
+      restart: unless-stopped
+      # command: --appendonly yes
+
+networks:
+  troitsk_qc:
+    driver: bridge
