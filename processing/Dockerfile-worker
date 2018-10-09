@@ -1,0 +1,12 @@
+FROM  python:3.6
+
+COPY requirements.txt /root/processing/requirements.txt
+
+WORKDIR /root/processing
+
+RUN pip install -r requirements.txt
+
+COPY . /root/processing/
+
+CMD celery -A worker worker --config celeryconfig \
+  --concurrency=$WORKER_CONCURRENCY

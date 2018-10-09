@@ -14,3 +14,9 @@ cache = Cache(app.server, config={
     'CACHE_REDIS_URL': 'redis://{}/cache'.format(
         environ['REDIS_HOSTNAME'])
 })
+
+# cache = Cache(app.server, config={
+#     'CACHE_TYPE': 'filesystem',
+#     'CACHE_DIR': 'redis://{}/cache'.format(
+#         environ['REDIS_HOSTNAME'])
+# })

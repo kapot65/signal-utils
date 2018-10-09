@@ -5,6 +5,7 @@ from os.path import dirname
 
 import dash_core_components as dcc
 import dash_html_components as html
+import numpy as np
 import pynumparser
 from dash.dependencies import Event, Input, Output, State
 from dateutil.parser import parse as tparse
@@ -13,6 +14,8 @@ from app import app
 from defaults import (AMP_RANGE_MAX, AMP_RANGE_MIN, DEF_BINS, DEF_RANGE_L,
                       DEF_RANGE_R)
 from reducer import filter_points, get_points_cr, get_points_hist
+
+FIG_1_TITLE = 'Points count rate (click to group by cr, select to show hist)'
 
 app.css.append_css({
     "external_url":
@@ -110,7 +113,7 @@ app.layout = html.Div([
                 figure={
                     'data': [],
                     'layout': {
-                        'title': 'Points count rate'
+                        'title': FIG_1_TITLE
                     }
                 }
             ),
@@ -118,15 +121,45 @@ app.layout = html.Div([
     ], className='row'),
     html.Div([
         html.Div([
-            dcc.Graph(
-                id='point-graph',
-                figure={
-                    'data': [],
-                    'layout': {
-                        'title': 'Point amplitudes histogram'
-                    }
-                }),
-        ], className='col-md-6')
+            html.Div([
+                dcc.Graph(
+                    id='groups-graph',
+                    figure={
+                        'data': [],
+                        'layout': {
+                            'title': '10% grouping'
+                        }
+                    }),
+            ], className='col-md-6'),
+            html.Div([
+                dcc.Graph(
+                    id='point-graph',
+                    figure={
+                        'data': [],
+                        'layout': {
+                            'title': 'Point amplitudes histogram'
+                        }
+                    }),
+            ], className='col-md-6')
+        ], className='row'),
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.Label('Count rate percentage for grouping',
+                               htmlFor='group-perc'),
+                    dcc.Input(
+                        type='number',
+                        id='group-perc',
+                        min=0,
+                        max=100,
+                        value=10,
+                        className='form-control'
+                    )
+                ], className='form-group'),
+            ], className='col-md-5 col-md-offset-1'),
+            html.Div([
+            ], className='col-md-6')
+        ], className='row'),
     ], className='row'),
 ])
 
@@ -144,7 +177,9 @@ def _display_click_data(selectedData):
             }
         }
 
-    points = [d['customdata'] for d in selectedData['points']]
+    data = selectedData
+
+    points = [d['customdata'] for d in data['points']]
     hists = get_points_hist(points)
 
     return {
@@ -164,17 +199,7 @@ def _display_click_data(selectedData):
     }
 
 
-@app.callback(
-    Output('points-graph', 'figure'),
-    [],
-    [State('voltage-filter', 'value'),
-     State('fill-filter', 'value'),
-     State('sets-filter', 'value'),
-     State('l-border', 'value'),
-     State('r-border', 'value')],
-    [Event('apply-button', 'click')])
-def recalc_points(voltage, fill, sets, l_bord, r_bord):
-    """Apply filters and redraw points."""
+def _recalc(voltage, fill, sets, l_bord, r_bord):
     volt_range = pynumparser.NumberSequence().parse(voltage)
     fill_range = fill.split(', ')
     sets_range = pynumparser.NumberSequence().parse(sets)
@@ -224,10 +249,61 @@ def recalc_points(voltage, fill, sets, l_bord, r_bord):
     return {
         'data': sets,
         'layout': {
-            'title': 'Points count rate'
+            'title': FIG_1_TITLE
         }
     }
 
+
+@app.callback(
+    Output('points-graph', 'figure'),
+    [],
+    [State('voltage-filter', 'value'),
+     State('fill-filter', 'value'),
+     State('sets-filter', 'value'),
+     State('l-border', 'value'),
+     State('r-border', 'value'),
+     State('points-graph', 'relayoutData'),
+     State('points-graph', 'figure')],
+    [Event('apply-button', 'click')])
+def recalc_points(voltage, fill, sets, l_bord, r_bord, rdata, figure):
+    """Apply filters and redraw points."""
+    return _recalc(voltage, fill, sets, l_bord, r_bord)
+
+
+def _filter_fig(fig, mean, perc=0.1):
+    filtered = [
+        (x, y, t) for y, (x, t) in (zip(fig['y'], zip(fig['x'], fig['text'])))
+        if abs(y - mean) / mean < perc]
+    out = {**fig}
+    out['x'] = [f[0] for f in filtered]
+    out['y'] = [f[1] for f in filtered]
+    out['text'] = [f[2] for f in filtered]
+    return out
+
+
+@app.callback(
+    Output('groups-graph', 'figure'),
+    [Input('points-graph', 'clickData')],
+    [State('group-perc', 'value'),
+     State('points-graph', 'figure')])
+def group(clickData, perc, figure):
+    """Apply filters and redraw points."""
+    if not clickData:
+        return figure
+
+    mean = np.mean([p['y'] for p in clickData['points']])
+
+    figure['data'] = [
+        d for d in (_filter_fig(f, mean, perc / 100)
+                    for f in figure['data']) if d['x']]
+
+    figure['layout']['title'] = '{}% grouping (mean = {})'.format(
+        perc, np.round(mean, 4))
+
+    return figure
+
+
+server = app.server
 
 if __name__ == '__main__':
     app.run_server(debug=False)

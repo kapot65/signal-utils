@@ -20,7 +20,46 @@ services:
         - ${DATA_PATH}/redis:/data
       hostname: ${REDIS_HOSTNAME}
       restart: unless-stopped
-      # command: --appendonly yes
+
+  worker:
+      build:
+        context: ${PWD}
+        dockerfile: Dockerfile-worker
+      env_file: ${PWD}/.env
+      networks:
+        - troitsk_qc
+      restart: unless-stopped
+      volumes:
+         - ${PWD}/.env:/root/processing/.env:ro
+         - ${LAN10_DATA_PATH}:${LAN10_DATA_PATH}:ro
+
+  ui:
+      build:
+        context: ${PWD}
+        dockerfile: Dockerfile-ui
+      env_file: ${PWD}/.env
+      networks:
+        - troitsk_qc
+      restart: unless-stopped
+      hostname: ${UI_HOSTNAME}
+      volumes:
+         - ${PWD}/.env:/root/processing/.env:ro
+         - ${LAN10_DATA_PATH}:${LAN10_DATA_PATH}:ro
+
+  dns:
+    restart: unless-stopped
+    build: ${PWD}/dns-forwarder
+    networks:
+      - troitsk_qc
+    hostname: ${DNS_SERVER_HOSTNAME}
+    volumes:
+       - /etc/hosts:/usr/src/hosts
+       - /var/run/docker.sock:/var/run/docker.sock
+    tty: true
+    environment:
+      DNS_REFRESH_TIME_S: 5
+      DNS_FILTER_CONTAINS: intranet
+      HOST_PATH: /usr/src/hosts
 
 networks:
   troitsk_qc:

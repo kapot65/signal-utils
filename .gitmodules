@@ -1,0 +1,3 @@
+[submodule "processing/dns-forwarder"]
+	path = processing/dns-forwarder
+	url = https://github.com/kapot65/dns-forwarder.git
