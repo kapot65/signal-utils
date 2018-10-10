@@ -294,7 +294,7 @@ def group(clickData, perc, figure):
     mean = np.mean([p['y'] for p in clickData['points']])
 
     figure['data'] = [
-        d for d in (_filter_fig(f, mean, perc / 100)
+        d for d in (_filter_fig(f, mean, perc / 100 / 2)
                     for f in figure['data']) if d['x']]
 
     figure['layout']['title'] = '{}% grouping (mean = {})'.format(
