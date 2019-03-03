@@ -17,7 +17,7 @@ TIME_FILTER_THRESH = 6000
 AMPL_THRESH = 496
 AMPL_MAX = 4016
 BINS = 55
-DATA_ROOT = "/home/chernov/data/lan10_processed/"
+DATA_ROOT = "/media/chernov/data/data/lan10_processed/"
 POINT_PATH = "2017_11/Fill_3/set_1/p81(30s)(HV1=14950).df"
 
 

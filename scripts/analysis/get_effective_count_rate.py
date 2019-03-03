@@ -20,6 +20,16 @@ from signal_utils.extract_utils import extract_amps_approx
 from signal_utils.generation_utils import generate_df
 from signal_utils.test_utils import _extract_real_frames
 
+TIME_FILTER_THRESH = 6000
+AMPL_THRESH = 496
+AMPL_MAX = 4016
+BINS = 55
+DATA_ROOT = "/media/chernov/data/data/lan10_processed/"
+# POINT_PATH = "2017_11/Fill_3/set_1/p81(30s)(HV1=14950).df"
+
+# DATA_ROOT = "/media/chernov/data/data/lan10_processed_kotlin/"
+POINT_PATH = "2017_11/Fill_2/set_1/p102(30s)(HV1=14000).df"
+
 
 def prepare_point(time_s=5, freq=40e3, amp_thresh=700,
                   extract_func=extract_amps_approx,
@@ -67,10 +77,13 @@ def get_time_filtered_crs(meta, times, time_thresh_ns=6000):
     счета.
 
     """
-    deltas = times[1:] - times[:-1]
+    deltas = (times[1:] - times[:-1])
 
-    filtered = np.hstack([[0, ], np.where(deltas > time_thresh_ns)[0] + 1])
+    filtered = np.hstack([[0, ], np.where(
+        np.logical_or(deltas < 0, deltas > time_thresh_ns))[0] + 1])
     filtered_out = np.setdiff1d(np.arange(times.size), filtered)
+
+    print(deltas[filtered_out - 1])
 
     filtered_time_s = deltas[filtered_out - 1].sum() * np.double(1e-9)
 
@@ -79,6 +92,8 @@ def get_time_filtered_crs(meta, times, time_thresh_ns=6000):
 
     tau = np.double(total_time_s - filtered_time_s) / np.double(filtered.size) - \
         np.double(time_thresh_ns) * np.double(1e-9)
+
+    print(time_thresh_ns, total_time_s, filtered_time_s, tau)
     count_rate = np.double(1) / tau
 
     return count_rate
@@ -97,27 +112,18 @@ def crs_compare_different_timesteps():
 
     Тест показывает причину возникновения "пилы" на графиках.
     """
-    freq = 42e3
-    amp_thresh = 750
-    time_s = 1.0
-    dist_path = path.join(path.dirname(__file__),
-                          '../../signal_utils/data/dist.dat')
+    _, meta, data = dfparser.parse_from_file(path.join(DATA_ROOT, POINT_PATH))
+    _, times = df_events_to_np(meta, data)
 
-    from signal_utils.extract_utils import extract_simple_amps
+    deltas = times[1:] - times[:-1]
+    hist, bins = np.histogram(deltas, bins=60, range=(-320 * 2, 320 * 63))
+    _, axes2 = plt.subplots()
+    axes2.step((bins[1:] + bins[:-1])/2, hist, where="mid")
+    axes2.grid()
+    # plt.show()
 
-    meta_gen, data_gen = prepare_point(time_s=time_s, freq=freq,
-                                       amp_thresh=amp_thresh,
-                                       extract_func=extract_simple_amps,
-                                       dist_path=dist_path)
-
-    _, times_gen = df_events_to_np(meta_gen, data_gen)
-
-    time_thrs_640, crs_gen_640 = get_crs(meta_gen, times_gen)
-    time_thrs_1000, crs_gen_1000 = get_crs(meta_gen, times_gen, step=1000)
-    time_thrs_500, crs_gen_500 = get_crs(meta_gen, times_gen, step=400)
-
+    time_thrs_640, crs_gen_640 = get_crs(meta, times)
     fig, axes = plt.subplots()
-
     fig.canvas.set_window_title('cr_steps_compare')
 
     axes.set_title("Effective Count Rate / Time threshold")
@@ -125,9 +131,6 @@ def crs_compare_different_timesteps():
     axes.set_ylabel("Effective Count Rate, Hz")
 
     axes.plot(time_thrs_640, crs_gen_640, label="Step = 640 ns")
-    axes.plot(time_thrs_500, crs_gen_500, label="Step = 400 ns")
-    axes.plot(time_thrs_1000, crs_gen_1000, label="Step = 1000 ns")
-
     axes.legend(loc=4)
 
 
