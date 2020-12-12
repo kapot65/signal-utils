@@ -1,6 +1,4 @@
 numpy
-scipy
-scipy
 mpld3
 tqdm
 PyDrive
