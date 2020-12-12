@@ -2,7 +2,7 @@ numpy
 mpld3
 tqdm
 PyDrive
-pandas
+#pandas
 python-dateutil
 keras==2.0.2
 tensorflow==1.0.1
