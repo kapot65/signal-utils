@@ -5,7 +5,7 @@ PyDrive
 #pandas
 python-dateutil
 keras==2.0.2
-tensorflow==1.0.1
+tensorflow==2.3.1
 matplotlib
 h5py
 multiprocess
